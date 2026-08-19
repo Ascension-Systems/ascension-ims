@@ -1,0 +1,51 @@
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  min-height: var(--tap-search);
+  padding: 0 56px 0 var(--space-4);
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-base);
+  /* Suppress the WebKit search decorations so the custom clear button is the only one. */
+  appearance: none;
+}
+
+.input::-webkit-search-cancel-button,
+.input::-webkit-search-decoration {
+  appearance: none;
+  display: none;
+}
+
+.input::placeholder {
+  color: var(--gray-500);
+}
+
+/* 48x48 tap target, inside the field. */
+.clear {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.clear:active {
+  outline: var(--border-width) solid var(--ink);
+}
+
+.clear svg {
+  width: 24px;
+  height: 24px;
+}

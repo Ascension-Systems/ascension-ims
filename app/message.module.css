@@ -1,0 +1,95 @@
+/* Shared layout for the small single-message screens: login, check-email, auth error,
+   not-found. Mobile-first, generous tap targets. */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
+  min-height: 100dvh;
+  justify-content: center;
+}
+
+.heading {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.body {
+  font-size: var(--text-base);
+  color: var(--gray-700);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.action:active {
+  border-width: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-700);
+}
+
+.input {
+  width: 100%;
+  min-height: var(--tap-search);
+  padding: 0 var(--space-4);
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-base);
+  appearance: none;
+}
+
+.submit {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit:active {
+  border-width: 4px;
+}
+
+.notice {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-components);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

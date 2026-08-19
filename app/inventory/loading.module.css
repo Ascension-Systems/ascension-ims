@@ -1,0 +1,53 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.bar {
+  height: var(--tap-search);
+  border: var(--border-width) solid var(--gray-300);
+}
+
+.chips {
+  height: var(--tap-chip);
+  border: var(--border-width) solid var(--gray-300);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card {
+  position: relative;
+  min-height: 88px;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--gray-300);
+}
+
+.name {
+  display: block;
+  width: 60%;
+  height: 18px;
+  background: var(--gray-100);
+}
+
+.sku {
+  display: block;
+  width: 30%;
+  height: 14px;
+  margin-top: var(--space-2);
+  background: var(--gray-100);
+}
+
+.figure {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 64px;
+  height: 28px;
+  background: var(--gray-100);
+}

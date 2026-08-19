@@ -1,0 +1,70 @@
+/* Mobile-first: the availability block is the right-hand column of the card grid at 375px
+   and never wraps under the product name. */
+
+.block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  text-align: right;
+  /* Keeps the figure from being squeezed by a long product name. */
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-700);
+  /* A long label ("AVAILABLE (QUICKBOOKS)") wraps rather than widening the column. */
+  max-width: 108px;
+  line-height: 1.2;
+}
+
+.figure {
+  display: inline-block;
+  font-size: var(--text-figure);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  /* Fill treatment comes from the global .figure* classes, which match the status badge. */
+}
+
+.uom {
+  font-size: var(--text-label);
+  color: var(--gray-500);
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.components {
+  font-size: var(--text-components);
+  color: var(--gray-700);
+}
+
+/* The advisory delta line. Rendered only when qty_committed_portal > 0. With no commitments
+   recorded -- the state a fresh demo starts in -- every row shows the plain QuickBooks
+   picture, which is correct and not a bug. */
+.advisory {
+  font-size: var(--text-components);
+  font-weight: 600;
+  color: var(--ink);
+  border-left: var(--border-width) solid var(--ink);
+  padding-left: var(--space-2);
+}
+
+.flag {
+  font-weight: 700;
+}
+
+.secondary {
+  font-size: var(--text-components);
+  color: var(--gray-500);
+}

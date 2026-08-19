@@ -1,0 +1,20 @@
+.form {
+  display: flex;
+}
+
+.button {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 var(--space-3);
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-components);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Instantaneous press feedback. No transition. */
+.button:active {
+  border-width: 4px;
+}

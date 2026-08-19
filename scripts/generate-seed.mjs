@@ -60,6 +60,16 @@ const int = (min, max) => min + Math.floor(rand() * (max - min + 1))
 const pick = (arr) => arr[int(0, arr.length - 1)]
 /** True with probability p. */
 const chance = (p) => rand() < p
+/** Weighted pick from [[value, weight], ...]. Weights need not sum to 1. */
+const weighted = (entries) => {
+  const total = entries.reduce((sum, [, w]) => sum + w, 0)
+  let roll = rand() * total
+  for (const [value, w] of entries) {
+    roll -= w
+    if (roll <= 0) return value
+  }
+  return entries[entries.length - 1][0]
+}
 
 /* ------------------------------------------------------------------ *
  * Catalogue vocabulary -- invented, generic, furniture-industry
@@ -234,19 +244,61 @@ function generateCatalogue() {
 
       const lowStockThreshold = int(category.threshold[0], category.threshold[1])
 
-      // Quantities. qty_committed is drawn to be plausible relative to qty_on_hand
-      // (0-60% of it), producing a realistic spread of statuses across the list without
-      // any of them being a fixture.
-      const onHand = int(category.onHand[0], category.onHand[1])
-      const committed = Math.round(onHand * (rand() * 0.6))
-      const hasIncoming = chance(0.28)
-      const incoming = hasIncoming ? int(6, 240) : 0
-      const eta = hasIncoming ? int(3, 45) : null
+      /*
+       * Quantities.
+       *
+       * qty_committed stays plausible relative to qty_on_hand -- it is never more than 60%
+       * of it -- but the row is drawn by first choosing which STATUS BAND it should land in.
+       * Drawing on_hand uniformly and letting the status fall out of it puts ~88% of the
+       * catalogue in "in stock", which makes the status filter chips nearly useless and does
+       * not deliver the realistic spread the catalogue exists to provide.
+       *
+       * The algebra that keeps both properties true at once: pick the AVAILABLE figure `a`
+       * first, then draw committed `c` in [0, 1.5a] and set on_hand = a + c. Then
+       *     c <= 1.5a  <=>  c <= 0.6(a + c)  <=>  c <= 60% of on_hand.
+       * So every row satisfies the 0-60% rule by construction, at any target availability.
+       */
+      const band = weighted([
+        ['in-stock', 0.55],
+        ['low', 0.2],
+        ['none-incoming', 0.13],
+        ['none', 0.12],
+      ])
 
-      // Freshness: catalogue rows are fresh (1-300 minutes). The stale case is a pinned
-      // fixture (SEA-9005), not a random draw, so the stale threshold is demonstrable on
-      // every run rather than by luck.
-      const ageMinutes = int(1, 300)
+      let onHand
+      let committed
+      let incoming = 0
+      let eta = null
+
+      if (band === 'none' || band === 'none-incoming') {
+        // available <= 0 with committed capped at 60% of on_hand is only reachable at
+        // on_hand = 0 -- which is the honest shape anyway: nothing on the shelf.
+        onHand = 0
+        committed = 0
+        if (band === 'none-incoming') {
+          incoming = int(6, 240)
+          eta = int(3, 45)
+        }
+      } else {
+        const available =
+          band === 'low'
+            ? int(1, Math.max(1, lowStockThreshold - 1))
+            : int(lowStockThreshold, Math.max(lowStockThreshold + 1, Math.round(category.onHand[1] * 0.6)))
+        committed = int(0, Math.floor(available * 1.5))
+        onHand = available + committed
+        if (chance(0.28)) {
+          incoming = int(6, 240)
+          eta = int(3, 45)
+        }
+      }
+
+      /*
+       * Freshness. Most catalogue rows are fresh (1-300 minutes). A deterministic ~8% slice
+       * is drawn well past the 360-minute threshold so the "flag anything staler than a few
+       * hours" requirement and the Stale filter chip are demonstrable across the list, not
+       * only on the single pinned stale fixture (SEA-9005, 3 days).
+       */
+      const ageMinutes = chance(0.08) ? int(7 * 60, 72 * 60) : int(1, 300)
 
       products.push({ sku, name, category: category.name, uom: 'EA', lowStockThreshold })
       inventory.push({

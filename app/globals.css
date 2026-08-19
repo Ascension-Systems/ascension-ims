@@ -1,0 +1,297 @@
+/* ==========================================================================
+   Design tokens and base styles.
+
+   PALETTE IS ACHROMATIC: white, grays and black only. No brand hue, no accent
+   colour, no logo, no company name -- not Kyrie, not Ascension, not the end
+   client. This is a deliberate decision (D2), not an oversight.
+
+   The consequence is binding rather than optional: stock status must be
+   legible at a glance WITHOUT READING THE NUMBERS and NOT BY COLOUR ALONE --
+   and with an achromatic palette it also cannot be carried by LIGHTNESS as
+   the only channel. A status that reads only as "the darker one" fails the
+   requirement exactly the way a red/green pair would. Status is therefore
+   encoded with SHAPE, GLYPH, LABEL TEXT, FILL WEIGHT, BORDER TREATMENT and
+   POSITION -- see the .status* rules below.
+
+   ACHROMATIC DOES NOT MEAN LOW CONTRAST. Body text is --ink on --paper at
+   21:1. --gray-500 is the LIGHTEST permitted text colour and only for
+   secondary text on white (5.7:1). Never gray text on a gray fill.
+
+   NO DECORATIVE ANIMATION. No CSS transitions and no keyframe animations at
+   all. Press feedback is an instantaneous :active border-width change. The
+   loading skeleton is static.
+
+   Mobile-first: every rule here is written for 375x667 and widens upward.
+   ========================================================================== */
+
+:root {
+  /* --- Achromatic palette. These are the ONLY colours in the build. --- */
+  --paper: #ffffff;
+  --ink: #000000;
+  --gray-900: #111111;
+  --gray-700: #3d3d3d;
+  --gray-500: #6b6b6b;
+  --gray-300: #c9c9c9;
+  --gray-100: #efefef;
+
+  /* A texture channel, so "none available" is distinguishable without hue or
+     lightness: a hatched fill reads differently from a flat one even in a
+     grayscale photocopy or in poor light. */
+  --hatch: repeating-linear-gradient(45deg, var(--gray-300) 0 2px, transparent 2px 6px);
+
+  /* --- Type scale. Base 17px: readable at arm's length in poor light. --- */
+  --text-base: 17px;
+  --text-name: 18px;
+  --text-sku: 14px;
+  --text-figure: 28px;
+  --text-components: 14px;
+  --text-label: 13px;
+
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* --- Tap targets. Minimum 48x48 CSS px everywhere. --- */
+  --tap: 48px;
+  --tap-chip: 44px;
+  --tap-search: 56px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --rule-width: 4px;
+  --border-width: 2px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.45;
+  /* No overscroll bounce revealing a differently-coloured background. */
+  overscroll-behavior-y: none;
+}
+
+/* Belt and braces on the no-animation rule: nothing in this build animates,
+   and nothing added later should start without a deliberate decision. */
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--ink);
+}
+
+/* Visible focus everywhere. High contrast, not a subtle glow. */
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   STATUS ENCODING — the multi-channel treatment.
+
+   Four stock statuses. Every PAIR differs on at least three channels, so the
+   set survives the removal of colour AND lightness:
+
+     status          glyph                    border   fill              left rule
+     --------------- ------------------------ -------- ----------------- ---------------------
+     IN STOCK        filled square            solid    solid black       solid, full height
+     LOW             outlined triangle        solid    white             solid, top half only
+     NONE — INCOMING down-arrow, dashed ring  dashed   white             dashed, full height
+     NONE AVAILABLE  circle with a slash      dotted   white + hatch     dotted, full height
+
+   LABELS ARE ALWAYS RENDERED. Never icon-only, at any breakpoint. The glyph
+   is aria-hidden; the label carries the accessible name.
+   ========================================================================== */
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.statusBadge svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+/* IN STOCK — solid inverted fill, solid border, square glyph. */
+.statusInStock {
+  background: var(--ink);
+  color: var(--paper);
+  border-style: solid;
+}
+
+/* LOW — outlined, solid border, triangle glyph. */
+.statusLow {
+  background: var(--paper);
+  color: var(--ink);
+  border-style: solid;
+}
+
+/* NONE — INCOMING — dashed border, arrow-in-dashed-ring glyph. */
+.statusNoneIncoming {
+  background: var(--paper);
+  color: var(--ink);
+  border-style: dashed;
+}
+
+/* NONE AVAILABLE — dotted border, slashed-circle glyph, hatched ground. */
+.statusNone {
+  background-color: var(--paper);
+  background-image: var(--hatch);
+  color: var(--ink);
+  border-style: dotted;
+}
+
+/* --- The left rule. A fifth channel: position and extent. --- */
+.ruleInStock {
+  border-left: var(--rule-width) solid var(--ink);
+}
+
+/* Top half only. Rendered as a gradient so the rule genuinely stops halfway
+   rather than being a shorter element that shifts the layout. */
+.ruleLow {
+  border-left: var(--rule-width) solid transparent;
+  background-image: linear-gradient(var(--ink) 0 50%, transparent 50% 100%);
+  background-repeat: no-repeat;
+  background-size: var(--rule-width) 100%;
+  background-position: left top;
+  background-origin: border-box;
+  background-clip: border-box;
+}
+
+.ruleNoneIncoming {
+  border-left: var(--rule-width) dashed var(--ink);
+}
+
+.ruleNone {
+  border-left: var(--rule-width) dotted var(--ink);
+}
+
+/* --- The availability figure carries a matching fill treatment. --- */
+.figureInStock {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0 var(--space-2);
+}
+
+.figureLow {
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  padding: 0 var(--space-2);
+}
+
+.figureNoneIncoming,
+.figureNone {
+  background-color: var(--paper);
+  background-image: var(--hatch);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  padding: 0 var(--space-2);
+}
+
+/* ==========================================================================
+   FRESHNESS — orthogonal to stock status, rendered as a SECOND badge.
+
+   An item can be Low AND Stale. Collapsing those onto one scale would hide
+   one of them. The stale badge is inverted-filled with a clock glyph, which
+   is distinct from every stock badge: all of them are outlined except IN
+   STOCK, whose glyph is a square, not a clock.
+   ========================================================================== */
+
+.staleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.staleBadge svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+/* A dashed outline around the ENTIRE card, so staleness is visible before the
+   badge is read. */
+.cardStale {
+  outline: var(--border-width) dashed var(--ink);
+  outline-offset: -2px;
+}

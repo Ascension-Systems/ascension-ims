@@ -1,0 +1,68 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* Horizontally scrollable row. Chips never wrap into a second line on a phone. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.group::-webkit-scrollbar {
+  display: none;
+}
+
+.groupLabel {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-700);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap-chip);
+  /* Generous horizontal padding carries the target area. */
+  padding: 0 var(--space-4);
+  flex: 0 0 auto;
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-width) solid var(--ink);
+  font-size: var(--text-components);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:active {
+  border-width: 4px;
+}
+
+/* Selection is encoded on THREE channels, not colour:
+     1. inverted fill
+     2. a 2px inset border (the outline, drawn inside)
+     3. the label prefixed with a check glyph */
+.chipSelected {
+  background: var(--ink);
+  color: var(--paper);
+  outline: var(--border-width) solid var(--ink);
+  outline-offset: -6px;
+}
+
+.chip svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
