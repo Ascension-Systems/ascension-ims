@@ -626,17 +626,35 @@ precondition, the mitigation **did not run for that run**, and the run says so r
 implying otherwise. A run that could not execute 5.4 is not a run in which the anti-enumeration
 property was demonstrated. Absence of evidence, printed as absence of evidence.
 
-### The rate-limit asymmetry — behaviour unchanged, but do not lose this
+### The rate-limit asymmetry — CLOSED on 2026-08-19
 
-5.4 degrades every one of its ids to `NOT EXECUTED` when *either* response is rate-limited. With
-`shouldCreateUser: false` the email-send path is reached only for registered addresses, so
-`over_email_send_rate_limit` fires only for a registered address — the open question already
-recorded in `app/login/auth-error.ts`. It follows that a run in which **only the registered
-address** is throttled is *itself* the enumeration signal that open question describes. The
-harness is right to decline to assert on a throttled run, but a one-sided throttle is evidence,
-not noise, and whoever sees one should be reading that open question rather than re-running until
-it clears. The Human sanctioned "throttle fired → `NOT EXECUTED`"; the behaviour stands as
-sanctioned, and this paragraph exists so the signal is not mistaken for a flake.
+This section used to record an open enumeration oracle. It is now closed, and the correction
+matters more than the history.
+
+With `shouldCreateUser: false` the email-send path is reached only for registered addresses, so
+`over_email_send_rate_limit` fires only for a registered address. While that code classified
+`RATE_LIMITED`, submitting the same address twice inside the per-address throttle window returned
+`/login?error=rate_limited` for a registered address and `/login/check-email` for an unregistered
+one — a reliable oracle against the ~120 named reps the anti-enumeration defence protects. A run
+in which **only the registered address** was throttled was itself an instance of that signal.
+
+Under the 2026-08-19 ruling — *a security predicate that branches on unmeasured vendor behaviour
+must fail toward the safe classification until it is measured* — `over_email_send_rate_limit` was
+moved into `SUPPRESSED_CODES` in `app/login/auth-error.ts`. Registered and unregistered responses
+are now identical **inside** the throttle window as well as outside it. Consequently **5.4 no
+longer degrades to `NOT EXECUTED` on a one-sided throttle for that code**: a throttled registered
+address redirects to `/login/check-email`, byte-identical to the unregistered one, which is
+exactly what 5.4c compares. `isRateLimitRedirect` remains, and still guards
+`over_request_rate_limit` and a bare `429` — both IP/route-level, address-independent, and
+legitimate re-run conditions.
+
+The Human's sanction of "throttle fired → `NOT EXECUTED`" stands for the codes that still reach
+`RATE_LIMITED`; it is simply no longer reachable via the per-address code. `RATE_LIMIT_CODES`
+retains exactly one member, `over_request_rate_limit`, and the set is deliberately kept: the
+`status === 429` branch and invariants 5.C2/5.C5 depend on it existing.
+
+The cost of the move — suppressing a throttle re-hides a project-wide failure mode — is paid by
+the server-side configuration health signal at `GET /api/health/auth`, not absorbed.
 
 ### A concrete case the default catches
 
