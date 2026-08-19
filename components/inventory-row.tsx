@@ -6,7 +6,7 @@ import { StaleBadge } from '@/components/stale-badge'
 import { RelativeTime } from '@/components/relative-time'
 import { ChevronGlyph } from '@/components/icons'
 import { rowStatus, sourceLabel } from '@/lib/status'
-import { formatAbsolute, formatRelativeAge } from '@/lib/relative-time'
+import { formatDateOnly, formatEta, formatRelativeAge } from '@/lib/relative-time'
 import type { InventoryAuthority, InventoryViewRow } from '@/lib/types'
 import styles from './inventory-row.module.css'
 
@@ -17,14 +17,6 @@ import styles from './inventory-row.module.css'
  * there is no navigation, no back button and no lost scroll position. That keeps the
  * three-tap budget (chip or search -> row -> read).
  */
-
-function etaLabel(iso: string | null): string | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return `ETA ${d.getUTCDate()} ${months[d.getUTCMonth()]}`
-}
 
 export function InventoryRow({
   row,
@@ -45,7 +37,7 @@ export function InventoryRow({
   overrideAuthor?: string | null
 }) {
   const encoding = rowStatus(row)
-  const eta = row.qty_incoming > 0 ? etaLabel(row.incoming_eta) : null
+  const eta = row.qty_incoming > 0 ? formatEta(row.incoming_eta) : null
   const panelId = `panel-${row.sku}-${row.location}`
 
   return (
@@ -118,7 +110,7 @@ export function InventoryRow({
             <dt>Incoming</dt>
             <dd>
               {row.qty_incoming}
-              {row.incoming_eta ? ` · arriving ${formatAbsolute(row.incoming_eta)}` : ''}
+              {row.incoming_eta ? ` · arriving ${formatDateOnly(row.incoming_eta)}` : ''}
             </dd>
           </div>
           <div className={styles.detailRow}>
