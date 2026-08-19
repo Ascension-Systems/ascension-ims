@@ -219,6 +219,48 @@ the working tree — so run it from a clean checkout, or move your `.env.local` 
 `PORTAL_BASE_URL` is a **harness-only** input, deliberately absent from `.env.example` because
 the application never reads it. Pass it on the command line in step 10.
 
+### Step 3b — harden the hosted project's auth settings
+
+**Two dashboard settings are load-bearing security controls. Neither can be set from this
+repository, and the application is NOT safe without them.** Added by the security audit pass;
+they were previously undocumented.
+
+**1. Turn OFF "Allow new users to sign up."**
+Dashboard → **Authentication → Sign In / Providers → Email**. (`supabase/config.toml` sets
+`enable_signup = false`, but that file configures the *local* CLI stack only and has no effect
+on the hosted project.)
+
+`shouldCreateUser: false` in `app/login/actions.ts` protects **this app's own form and nothing
+else.** The anon key is public by design — it ships to every browser. Anyone holding it can
+call the GoTrue endpoint directly:
+
+```
+POST https://<project>.supabase.co/auth/v1/otp
+apikey: <the public anon key>
+{ "email": "anyone@anywhere", "create_user": true }
+```
+
+With project-level signup left at its default (**enabled**), that self-registers an arbitrary
+stranger into `auth.users`; the `on_auth_user_created` trigger then gives them a `profiles`
+row with role `rep`, and a magic link lands in their inbox. They can now read the client's
+entire inventory. Turning the project-level setting off is the only thing that closes this.
+
+**2. Pin the Site URL and the Redirect URL allow-list to the real production origin.**
+Dashboard → **Authentication → URL Configuration**. Set **Site URL** to the deployed origin,
+and set **Redirect URLs** to exactly that origin's callback (for example
+`https://<the-production-host>/auth/callback`) — plus the local development entries if you
+want them. Do **not** leave a wildcard.
+
+`app/login/actions.ts` builds `emailRedirectTo` from the request's `x-forwarded-host` /
+`host` header, which is attacker-controllable. An attacker who sends a login request for a
+**victim's** address with a forged host header would otherwise cause the victim's magic-link
+email to point at the attacker's domain — and clicking it hands over the auth `code`, which is
+account takeover. GoTrue refuses any `redirect_to` that is not on the allow-list and falls
+back to the Site URL, so a correctly pinned allow-list is what makes that header untrusted-safe.
+It is the *only* control standing in front of that path today.
+
+Confirm both before the portal is given a public URL.
+
 ### Step 4 — provision the real people
 
 **Users are pre-provisioned. There is no self-registration.** `signInWithOtp` is called with
