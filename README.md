@@ -61,6 +61,16 @@ cp .env.example .env.local     # then fill in the values (see below)
 npm run dev
 ```
 
+`.env.local` needs all four names. Three come from the Supabase dashboard; the fourth is the
+origin this app runs on, and locally that is:
+
+```
+NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
+```
+
+Without it the login form fails closed with the "cannot send" page — deliberately. See
+**Environment variables** below.
+
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
@@ -127,7 +137,17 @@ gitignored, and in the Netlify dashboard for the deployed site.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SITE_URL=
 ```
+
+**`NEXT_PUBLIC_SITE_URL` is the origin this app puts in magic-link emails.** Set it to the
+deployed origin with no trailing slash and no path (e.g. `https://portal.example.com`);
+locally, `http://127.0.0.1:3000`. It is validated in `lib/env.ts` — absolute, `https` except on
+`localhost` / `127.0.0.1`, no path, no query, no fragment. **If it is unset the login form
+fails closed** with the "cannot send" page and a server-side log line naming the variable; it
+never falls back to a request header, because a request header is attacker-controlled and that
+was a live account-takeover path. Like the other two `NEXT_PUBLIC_` values it is **inlined at
+build time** — changing it in Netlify requires a rebuild, not just a redeploy.
 
 **`SUPABASE_SERVICE_ROLE_KEY` must never reach the browser.** It is never prefixed
 `NEXT_PUBLIC_`, is read in exactly one file (`lib/supabase/admin.ts`, which begins
@@ -205,8 +225,11 @@ committed.
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` locally; **Netlify dashboard** for the deployed site | the project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` locally; **Netlify dashboard** for the deployed site | the anon / publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` locally; **Netlify dashboard** for the deployed site | the service-role / secret key |
+| `NEXT_PUBLIC_SITE_URL` | `.env.local` locally; **Netlify dashboard** for the deployed site | the origin used in magic-link emails; must match the Redirect URL allow-list in step 3b |
 
-`cp .env.example .env.local` gives you the three names with empty values. Fill them in there.
+`cp .env.example .env.local` gives you the four names with empty values. Fill them in there.
+`NEXT_PUBLIC_SITE_URL` is not a dashboard value — it is this application's own origin
+(`http://127.0.0.1:3000` locally, the deployed origin in Netlify).
 
 **`SUPABASE_SERVICE_ROLE_KEY` is server-side only.** Never prefix it `NEXT_PUBLIC_`. It is
 read in exactly one application file (`lib/supabase/admin.ts`, which begins
@@ -220,6 +243,13 @@ the working tree — so run it from a clean checkout, or move your `.env.local` 
 the application never reads it. Pass it on the command line in step 10.
 
 ### Step 3b — harden the hosted project's auth settings
+
+> **⚠ UNTIL A PERSON PERFORMS THE TWO ACTIONS IN THIS STEP, THE SECURITY PROPERTIES THEY
+> DESCRIBE DO NOT EXIST.** No code in this repository can create them. `supabase/config.toml`
+> configures the *local* CLI stack only and has no effect on the hosted project. Anyone holding
+> the public anon key can self-register a stranger into `auth.users` and read the client's
+> entire inventory. This is not a hardening recommendation; it is a required manual action, and
+> the portal must not be given a public URL before it is done.
 
 **Two dashboard settings are load-bearing security controls. Neither can be set from this
 repository, and the application is NOT safe without them.** Added by the security audit pass;
@@ -245,21 +275,38 @@ stranger into `auth.users`; the `on_auth_user_created` trigger then gives them a
 row with role `rep`, and a magic link lands in their inbox. They can now read the client's
 entire inventory. Turning the project-level setting off is the only thing that closes this.
 
+This is required **even though** `app/login/actions.ts` passes `shouldCreateUser: false` —
+that flag protects this app's own form and nothing else. It is not a substitute and never
+becomes one.
+
 **2. Pin the Site URL and the Redirect URL allow-list to the real production origin.**
 Dashboard → **Authentication → URL Configuration**. Set **Site URL** to the deployed origin,
 and set **Redirect URLs** to exactly that origin's callback (for example
 `https://<the-production-host>/auth/callback`) — plus the local development entries if you
 want them. Do **not** leave a wildcard.
 
-`app/login/actions.ts` builds `emailRedirectTo` from the request's `x-forwarded-host` /
-`host` header, which is attacker-controllable. An attacker who sends a login request for a
-**victim's** address with a forged host header would otherwise cause the victim's magic-link
-email to point at the attacker's domain — and clicking it hands over the auth `code`, which is
-account takeover. GoTrue refuses any `redirect_to` that is not on the allow-list and falls
-back to the Site URL, so a correctly pinned allow-list is what makes that header untrusted-safe.
-It is the *only* control standing in front of that path today.
+`app/login/actions.ts` **used to** build `emailRedirectTo` from the request's
+`x-forwarded-host` / `host` header, which is attacker-controllable. An attacker who sent a
+login request for a **victim's** address with a forged host header would cause the victim's
+magic-link email to point at the attacker's domain — and clicking it hands over the auth
+`code`, which is account takeover.
 
-Confirm both before the portal is given a public URL.
+**That is fixed at source as of 2026-08-19.** The origin now comes from `NEXT_PUBLIC_SITE_URL`
+through `lib/env.ts` and never from a header, in `app/login/actions.ts` and in
+`app/auth/callback/route.ts` alike. GoTrue additionally refuses any `redirect_to` that is not
+on the allow-list and falls back to the Site URL, so this setting is now **defence in depth**
+rather than the only control in front of that path. **Pin it anyway** — two independent
+controls is the correct posture for an account-takeover path, and the allow-list is what
+catches a `NEXT_PUBLIC_SITE_URL` that is set wrong.
+
+`NEXT_PUBLIC_SITE_URL` and the Redirect URL allow-list **must agree.** If they disagree, GoTrue
+discards this app's `redirect_to` and falls back to the Site URL, and magic links land on the
+wrong origin — which looks like "the link does nothing" rather than like a misconfiguration.
+
+Confirm both before the portal is given a public URL:
+
+- [ ] Signup disabled on the hosted project (confirmed in the dashboard, by a person, on ______)
+- [ ] Redirect URL allow-list pinned (confirmed in the dashboard, by a person, on ______)
 
 ### Step 4 — provision the real people
 
@@ -601,7 +648,19 @@ applied next week would otherwise show every row as days stale.
 ## Deployment
 
 Netlify connects to this repository and deploys on **push to `main`**. Environment variables
-are set in the Netlify dashboard, never in the repo.
+are set in the Netlify dashboard, never in the repo. All four are required:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | the Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon / publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | the service-role / secret key. Server-side only; never prefixed `NEXT_PUBLIC_` |
+| `NEXT_PUBLIC_SITE_URL` | **must equal the deployed origin**, with no trailing slash and no path, and **must appear in the Supabase Redirect URL allow-list** (step 3b) |
+
+The three `NEXT_PUBLIC_` values are **inlined at build time**. Changing any of them in Netlify
+requires a **rebuild**, not just a redeploy. If `NEXT_PUBLIC_SITE_URL` is unset, the login form
+fails closed with the "cannot send" page and logs the variable name server-side; it never falls
+back to a request header.
 
 **Pushing is a Human action** — a push is a deploy to real users. This repository has no
 remote configured.

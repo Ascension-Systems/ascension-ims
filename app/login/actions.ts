@@ -1,8 +1,8 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { siteUrl } from '@/lib/env'
 import {
   classifyAuthError,
   LOGIN_ERROR,
@@ -49,6 +49,21 @@ import {
  * The user-facing copy for UNAVAILABLE says the problem is not with the address, precisely so
  * that the infrastructure branch de-correlates itself from registration status and reveals
  * nothing an attacker can use.
+ *
+ * ------------------------------------------------------------------------------------
+ * THE REDIRECT ORIGIN IS CONFIGURATION, NOT A HEADER.
+ * ------------------------------------------------------------------------------------
+ * `emailRedirectTo` used to be built from `x-forwarded-host` / `host`, which an attacker sets.
+ * A login request submitted for a VICTIM'S address with a forged host header would send the
+ * victim a magic link pointing at the attacker's origin; clicking it hands over the auth
+ * `code`, which is account takeover. The victim does nothing wrong and sees nothing unusual.
+ *
+ * It is now `NEXT_PUBLIC_SITE_URL`, read and validated through `lib/env.ts`. DO NOT
+ * REINTRODUCE A HEADER FALLBACK "FOR PREVIEWS" — that is the whole defect. A preview
+ * deployment sets its own NEXT_PUBLIC_SITE_URL.
+ *
+ * The Supabase Redirect URL allow-list (README step 3b) still matters and is still required,
+ * but it is now defence in depth rather than the only control in front of this path.
  */
 export async function requestMagicLink(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim()
@@ -68,12 +83,16 @@ export async function requestMagicLink(formData: FormData) {
   try {
     // createClient() THROWS when a required env var is missing (lib/env.ts). It belongs
     // inside the try so a blank or wrong environment produces the honest error page instead
-    // of a framework error screen. headers() is in here for the same reason.
+    // of a framework error screen.
+    //
+    // siteUrl() is in here for the SAME reason, and that placement is load-bearing. It throws
+    // when NEXT_PUBLIC_SITE_URL is unset or malformed; the throw lands in the catch below,
+    // becomes `unavailable:threw`, and the user gets /login?error=unavailable while the server
+    // log carries "Missing environment variable NEXT_PUBLIC_SITE_URL...". Fail-closed and
+    // loud, with no new machinery. There is NO fallback to a request header, under any
+    // condition — see the note above.
     const supabase = await createClient()
-    const headerList = await headers()
-    const host = headerList.get('x-forwarded-host') ?? headerList.get('host')
-    const proto = headerList.get('x-forwarded-proto') ?? 'https'
-    const origin = host ? `${proto}://${host}` : ''
+    const origin = siteUrl()
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
