@@ -157,6 +157,19 @@ const q = encodeURIComponent
  * `kyv-verify-2` row if an assertion that should have been refused ever succeeds.
  *
  * Scoped by location and by the KYV- prefix. It cannot touch a SEA-* row or the demo delta.
+ *
+ * ------------------------------------------------------------------------------------
+ * THE NAMESPACE IS ONE PREFIX, AND EVERY PREDICATE MUST MATCH ALL OF IT
+ * ------------------------------------------------------------------------------------
+ * The harness's namespace is `sku LIKE 'KYV-%'` PLUS `location IN ('kyv-verify',
+ * 'kyv-verify-2')`. Sweeping commitments by LOCATION ALONE was a hole: a commitment on a
+ * `KYV-` sku at any OTHER location was never swept, and because
+ * `commitments (sku, location) REFERENCES inventory (sku, location) ON DELETE RESTRICT`
+ * the products delete below would then throw and teardown would fail — leaving the whole
+ * fixture set behind on a live client project. The third sweep closes it: the union of the
+ * three predicates covers everything the namespace can produce. Preflight
+ * (`sku=not.like.KYV-*`), the fixtures, the assertions and this cleanup now match the same
+ * one prefix exactly.
  */
 export async function teardownFixtures(cfg, identities) {
   const svc = identities.service
@@ -168,6 +181,12 @@ export async function teardownFixtures(cfg, identities) {
 
   const c2 = await deleteRows(cfg, svc, 'commitments', `location=eq.${q(KYV_LOCATION_ALT)}`)
   if (c2.ok) removed.commitments += c2.rowCount
+
+  // The prefix sweep. Same failure handling as the first sweep — a commitment left here is
+  // what makes the products delete below throw, so a soft failure would just move the error.
+  const c3 = await deleteRows(cfg, svc, 'commitments', 'sku=like.KYV-*')
+  if (!c3.ok) throw new Error(`teardown: could not delete KYV- commitments: ${c3.code} ${c3.message}`)
+  removed.commitments += c3.rowCount
 
   const p = await deleteRows(cfg, svc, 'products', 'sku=like.KYV-*')
   if (!p.ok) throw new Error(`teardown: could not delete KYV- products: ${p.code} ${p.message}`)

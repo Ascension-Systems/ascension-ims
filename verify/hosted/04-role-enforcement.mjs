@@ -192,21 +192,55 @@ export default async function attack4(ctx) {
   report.refused('4.8', 'rep INSERT INTO commitments refused', r48, '42501')
 
   /* ---------------------------------------------------------------- *
-   * 4.9 / 4.10 — the HTTP surface.
+   * 4.9 / 4.10 / 4.10b — the HTTP surface.
    *
    * middleware.ts matches /api/* and runs BEFORE the route handler:
    *   - with a session it passes the request through, so 4.9 reaches
    *     requireAdmin() and the route's own 403 is what answers;
    *   - with NO session it redirects to /login, so the route's 401 is
-   *     never reached. That redirect IS the refusal. 4.10 therefore
-   *     accepts either form and prints which one it observed, and
-   *     corroborates it the way that actually matters: no sync run row
-   *     appeared while the unauthenticated request was in flight.
+   *     never reached. That redirect IS the refusal.
+   *
+   * 4.10 USED TO ACCEPT EITHER FORM — `noSession.status === 401 ||
+   * redirected` — and that was itself a defect. A disjunction over two
+   * different mechanisms cannot fail on the wrong mechanism: it proved
+   * only that the request did not succeed, while wearing the label of a
+   * much stronger claim. Same shape as the deleted SKIP status.
+   *
+   * So: 4.10 now asserts the ONE mechanism that actually answers — the
+   * 307, specifically, to a Location whose path is /login — plus the
+   * corroboration that matters (no inventory_sync_runs row appeared).
+   * NextResponse.redirect(url) with no init defaults to 307, and
+   * lib/supabase/middleware.ts:58 uses exactly that form.
+   *
+   * The route handler's own 401 is recorded as 4.10b, NOT EXECUTED,
+   * because it is unreachable. Middleware refusing first is a STRONGER
+   * refusal, not a weaker one, so middleware.ts is deliberately NOT
+   * changed to make 4.10b reachable. The id is emitted on BOTH branches
+   * below — an id that appears only sometimes makes the disposition
+   * drift, which is the whole thing verify/lib/manifest.mjs exists to
+   * prevent.
    * ---------------------------------------------------------------- */
+  const ROUTE_401_UNREACHABLE =
+    'NOT EXECUTED — unreachable: middleware.ts matches /api/* and redirects before the route ' +
+    'handler runs. Middleware refusing first is a STRONGER refusal, not a weaker one, so ' +
+    'middleware.ts is deliberately not changed to make this reachable.'
+  const ROUTE_401_DESCRIPTION =
+    "POST /api/sync with no session reaches the route handler's own 401"
+
   if (!app.usable) {
     const reason = `${app.reason}${app.detail ? ` — ${app.detail}` : ''}`
     report.notExecuted('4.9', 'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE', reason)
-    report.notExecuted('4.10', 'POST /api/sync with no session is refused', reason)
+    report.notExecuted(
+      '4.10',
+      'POST /api/sync with no session is refused by middleware with a 307 to /login',
+      reason,
+    )
+    // Unreachable for a DIFFERENT reason here, but the id must always appear.
+    report.notExecuted('4.10b', ROUTE_401_DESCRIPTION, ROUTE_401_UNREACHABLE)
+    report.notes.push(
+      `4.10b: the route handler's own 401 in app/api/sync/route.ts is recorded as NOT ` +
+        `EXECUTED on every run. ${ROUTE_401_UNREACHABLE}`,
+    )
   } else {
     const withSession = await appFetch(cfg.portalBaseUrl, '/api/sync', {
       method: 'POST',
@@ -225,21 +259,34 @@ export default async function attack4(ctx) {
     const noSession = await appFetchNoSession(cfg.portalBaseUrl, '/api/sync', { method: 'POST' })
     const runsAfter = await countRows(cfg, identities.service, 'inventory_sync_runs')
 
-    const redirected = isLoginRedirect(noSession)
-    const refused = noSession.status === 401 || redirected
+    // Asserted specifically. No disjunction: the 307, to /login, and no sync run.
+    let redirectPath = null
+    if (noSession.location) {
+      try {
+        redirectPath = new URL(noSession.location, cfg.portalBaseUrl).pathname
+      } catch {
+        redirectPath = null
+      }
+    }
     const noRunWritten = runsBefore.ok && runsAfter.ok && runsAfter.count === runsBefore.count
 
     report.check(
       '4.10',
-      'POST /api/sync with no session is refused and no sync runs',
-      refused && noRunWritten,
-      `observed HTTP ${noSession.status}${noSession.location ? ` -> ${noSession.location}` : ''}; ` +
-        `inventory_sync_runs ${runsBefore.count} -> ${runsAfter.count}`,
+      'POST /api/sync with no session is refused by middleware with a 307 to /login',
+      noSession.status === 307 && redirectPath === '/login' && noRunWritten,
+      `expected HTTP 307 -> path /login with no new sync run; observed HTTP ` +
+        `${noSession.status}${noSession.location ? ` -> ${noSession.location}` : ''} ` +
+        `(path ${redirectPath ?? 'none'}); inventory_sync_runs ${runsBefore.count} -> ${runsAfter.count}`,
     )
+    report.notExecuted('4.10b', ROUTE_401_DESCRIPTION, ROUTE_401_UNREACHABLE)
+
+    // Unconditional. The mechanism is not a discovery to be reported conditionally: the
+    // refusal IS middleware's 307 and the route's 401 IS unreachable, on every run.
     report.notes.push(
-      redirected
-        ? `4.10: the refusal took the form of middleware.ts's redirect to /login (HTTP ${noSession.status}), not the route handler's 401 — the request never reached app/api/sync/route.ts. Both are refusals; the corroborating assertion is that no inventory_sync_runs row appeared.`
-        : `4.10: the refusal took the form of HTTP ${noSession.status} from the route handler.`,
+      `4.10: the refusal is middleware.ts's 307 redirect to /login — the request never reaches ` +
+        `app/api/sync/route.ts. Asserted specifically (307 AND Location path /login AND no new ` +
+        `inventory_sync_runs row), not as "401 or a redirect". The route handler's own 401 is ` +
+        `recorded separately as 4.10b, NOT EXECUTED: ${ROUTE_401_UNREACHABLE}`,
     )
   }
 

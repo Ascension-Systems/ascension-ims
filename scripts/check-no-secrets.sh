@@ -10,7 +10,7 @@
 #   * Supabase key prefixes (sbp_, sb_secret_, sb_publishable_, service_role JWTs)
 #   * password / secret / token / api_key assigned a literal value
 #   * a service-role key exposed to the browser via a NEXT_PUBLIC_ prefix
-#   * a committed .env / .env.local
+#   * a dotenv file that is tracked by git, or present but not gitignored
 #   * .env.example carrying anything other than bare NAME= lines
 #   * any environment VALUE reaching stdout from verify/ or scripts/
 #
@@ -70,12 +70,84 @@ scan "service-role key never prefixed NEXT_PUBLIC_" 'NEXT_PUBLIC_[A-Z_]*SERVICE_
 scan "no assigned value for SUPABASE_SERVICE_ROLE_KEY" \
   'SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^[:space:]]+'
 
-# --- No committed dotenv files. ---------------------------------------------------------
-envfiles="$(find . -maxdepth 2 -name '.env' -o -maxdepth 2 -name '.env.*' ! -name '.env.example' 2>/dev/null | grep -v node_modules || true)"
-if [ -n "$envfiles" ]; then
-  report "no committed .env files" "$envfiles"
+# --- No dotenv file may be TRACKED BY GIT or sit OUTSIDE .gitignore. --------------------
+#
+# RE-SCOPED. The previous predicate was
+#   find . -maxdepth 2 -name '.env' -o -maxdepth 2 -name '.env.*' ! -name '.env.example'
+# which had a hole at both ends: it could not see a dotenv file three or more directories
+# deep, and it FAILED on a correctly gitignored local `.env.local`, which is not a leak and
+# is the normal state of a working tree. What actually matters is whether a dotenv file can
+# reach the repository. Two questions, both git-aware:
+#
+#   1. is any dotenv file TRACKED?                      -> FAIL, it is in the history
+#   2. is any dotenv file present but NOT GITIGNORED?   -> FAIL, one `git add .` from being in
+#
+# A dotenv file that is present and ignored is reported `ok`. That is the point of the
+# re-scope, not a weakening: git is the authority on what can be committed, and `find` is not.
+# Nothing else in this file changed.
+
+# Every dotenv candidate in the tree, repo-wide, no depth limit.
+env_candidates() {
+  find . \
+    \( -name node_modules -o -name .next -o -name .git -o -name out -o -name coverage \) -prune \
+    -o -type f \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -print 2>/dev/null
+}
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # 1. Tracked dotenv files. Any hit is a FAIL.
+  tracked=""
+  while IFS= read -r -d '' f; do
+    b="${f##*/}"
+    case "$b" in
+      .env.example) ;;
+      .env | .env.*) tracked="${tracked}${f}"$'\n' ;;
+    esac
+  done < <(git ls-files -z)
+  tracked="$(printf '%s' "$tracked" | sed '/^$/d')"
+
+  if [ -n "$tracked" ]; then
+    report "no dotenv file is tracked by git" "$tracked"
+  else
+    echo "ok  : no dotenv file is tracked by git"
+  fi
+
+  # 2. Present but not ignored. `git check-ignore -q` exits 0 when the path IS ignored.
+  #    Tracked paths are never "ignored", so they are excluded here to avoid a double report.
+  unignored=""
+  ignored=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    rel="${f#./}"
+    if [ -n "$tracked" ] && printf '%s\n' "$tracked" | grep -qxF "$rel"; then
+      continue
+    fi
+    if git check-ignore -q -- "$f"; then
+      ignored="${ignored}${f}"$'\n'
+    else
+      unignored="${unignored}${f}"$'\n'
+    fi
+  done < <(env_candidates)
+  unignored="$(printf '%s' "$unignored" | sed '/^$/d')"
+  ignored="$(printf '%s' "$ignored" | sed '/^$/d')"
+
+  if [ -n "$unignored" ]; then
+    report "every dotenv file present is gitignored" "$unignored"
+  else
+    echo "ok  : every dotenv file present is gitignored"
+    if [ -n "$ignored" ]; then
+      echo "$ignored" | sed 's/^/      ignored, not a leak: /'
+    fi
+  fi
 else
-  echo "ok  : no committed .env files"
+  # No git. Never silently skip: fall back to a repo-wide find and treat any hit as a FAIL.
+  echo "note: not a git work tree — the git-aware dotenv check is unavailable; falling back"
+  echo "      to a repo-wide find, in which ANY dotenv file present is a FAIL."
+  envfiles="$(env_candidates)"
+  if [ -n "$envfiles" ]; then
+    report "no dotenv file present (git-aware check unavailable)" "$envfiles"
+  else
+    echo "ok  : no dotenv file present (git-aware check unavailable)"
+  fi
 fi
 
 # --- .env.example must carry variable NAMES with EMPTY VALUES only. ---------------------

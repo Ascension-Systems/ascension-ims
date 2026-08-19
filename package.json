@@ -19,6 +19,10 @@
     "verify:identities:remove": "node scripts/remove-test-identities.mjs",
     "verify": "node verify/run-all.mjs",
     "verify:local": "node verify/run-all-local.mjs",
+    "verify:login-predicate": "node verify/login-predicate.mjs",
+    "verify:login-failure": "node verify/login-failure.mjs",
+    "verify:disposition": "node verify/disposition.mjs",
+    "check:disposition": "node verify/disposition.mjs --check",
     "check:secrets": "bash scripts/check-no-secrets.sh"
   },
   "dependencies": {

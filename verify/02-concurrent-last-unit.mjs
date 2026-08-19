@@ -220,7 +220,7 @@ export default async function attack2(db) {
     /* ================================================================ *
      * 2a.10 — the same losing call through the HTTP surface
      * ================================================================ */
-    report.skip(
+    report.notExecuted(
       '2a.10',
       'POST /api/commitments returns 409 INSUFFICIENT_AVAILABILITY',
       'NOT RUN ON THIS PATH, BY DESIGN. This runner exercises policy logic only — it does ' +

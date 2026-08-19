@@ -168,8 +168,8 @@ export default async function attack4(db) {
       'authoritative one — the route guards exist to return a clean 403/401 instead of a ' +
       '500. Both are exercised by `npm run verify` with PORTAL_BASE_URL set, where the ' +
       'harness mints a real session itself. No operator-supplied cookie is accepted anywhere.'
-    report.skip('4.9', 'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE', reason)
-    report.skip('4.10', 'POST /api/sync with no session is refused', reason)
+    report.notExecuted('4.9', 'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE', reason)
+    report.notExecuted('4.10', 'POST /api/sync with no session is refused', reason)
 
     /* ---------------------------------------------------------------- *
      * 4.11 — as anon. EXECUTE is revoked, so the guard's NULL-uid branch

@@ -16,10 +16,14 @@
  *
  * ASSERTIONS ARE MADE AGAINST A REAL DATABASE, NEVER AGAINST MOCKS.
  *
- * Exit code 0 only if all four pass.
+ * Exit code 0 only if all four pass AND the emitted assertion ids match verify/lib/manifest.mjs
+ * in both directions.
  */
 
 import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, migrationFiles } from './lib/harness.mjs'
+import { STATUS } from './lib/report.mjs'
+import { MANIFEST } from './lib/manifest.mjs'
+import { checkDrift, renderDrift, computeDisposition, renderDispositionBlock } from './lib/disposition.mjs'
 import attack1 from './01-rls-bypass.mjs'
 import attack2 from './02-concurrent-last-unit.mjs'
 import attack3 from './03-stale-baseline.mjs'
@@ -80,9 +84,10 @@ async function main() {
   }
 
   const failed = reports.filter((r) => !r.ok)
-  const totalAssertions = reports.reduce((n, r) => n + r.total - r.skips, 0)
+  const totalExecuted = reports.reduce((n, r) => n + r.executed, 0)
   const totalPassed = reports.reduce((n, r) => n + r.passed, 0)
-  const totalSkipped = reports.reduce((n, r) => n + r.skips, 0)
+  const totalStatic = reports.reduce((n, r) => n + r.statics, 0)
+  const totalNotRun = reports.reduce((n, r) => n + r.notRun, 0)
 
   process.stdout.write(
     [
@@ -92,12 +97,14 @@ async function main() {
       '='.repeat(78),
       ...reports.map(
         (r) =>
-          `  Attack ${r.number}  ${r.title.padEnd(42)} ${r.ok ? 'PASS' : 'FAIL'}  (${r.passed}/${r.total - r.skips})`,
+          `  Attack ${r.number}  ${r.title.padEnd(42)} ${r.ok ? 'PASS' : 'FAIL'}  (${r.passed}/${r.executed} executed` +
+          `${r.statics ? `, ${r.statics} static` : ''}${r.notRun ? `, ${r.notRun} not executed` : ''})`,
       ),
       '',
-      `  ${totalPassed}/${totalAssertions} POLICY-LOGIC assertions passed against the ephemeral local`,
+      `  ${totalPassed}/${totalExecuted} POLICY-LOGIC assertions passed against the ephemeral local`,
       '  PostgreSQL server' +
-        `${totalSkipped ? `, ${totalSkipped} skipped` : ''}. THIS IS NOT A HOSTED RESULT and must not be`,
+        `${totalStatic ? `, ${totalStatic} STATIC` : ''}` +
+        `${totalNotRun ? `, ${totalNotRun} NOT EXECUTED` : ''}. THIS IS NOT A HOSTED RESULT and must not be`,
       '  quoted as one. See the scope statement below.',
       '',
       PATH_CAVEAT.trimEnd(),
@@ -107,13 +114,13 @@ async function main() {
     ].join('\n') + '\n',
   )
 
-  if (totalSkipped) {
+  if (totalNotRun) {
     process.stdout.write(
       [
-        '  SKIPPED ASSERTIONS — these were NOT run and must not be reported as passes:',
+        '  NOT EXECUTED — these did NOT run and must not be reported as passes:',
         ...reports.flatMap((r) =>
           r.results
-            .filter((x) => x.status === 'SKIP')
+            .filter((x) => x.status === STATUS.NOT_EXECUTED)
             .map((x) => `    ${x.id}  ${x.description}\n         reason: ${x.detail}`),
         ),
         '',
@@ -121,7 +128,18 @@ async function main() {
     )
   }
 
-  process.exitCode = failed.length === 0 ? 0 : 1
+  /* ---------------------------------------------------------------- *
+   * Manifest drift. Both directions, every run. See verify/lib/manifest.mjs.
+   * ---------------------------------------------------------------- */
+  const drift = checkDrift(MANIFEST, reports, 'local')
+  process.stdout.write(renderDrift(drift))
+
+  /* ---------------------------------------------------------------- *
+   * The one authoritative disposition, computed — never hand-counted.
+   * ---------------------------------------------------------------- */
+  process.stdout.write(renderDispositionBlock(computeDisposition(MANIFEST)) + '\n')
+
+  process.exitCode = failed.length === 0 && drift.ok ? 0 : 1
 }
 
 main().catch(async (err) => {

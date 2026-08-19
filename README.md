@@ -74,12 +74,48 @@ npm run dev
 | `npm run verify` | **the four verification attacks, against the configured hosted project** |
 | `npm run verify:identities:remove` | removes every artefact the harness created |
 | `npm run verify:local` | the four attacks against an ephemeral local Postgres — **policy logic only** |
-| `npm run check:secrets` | repo-wide grep for key-shaped strings |
+| `npm run verify:login-predicate` | the magic-link error-classification table (5.1), on its own. No network, no credentials, no database |
+| `npm run verify:login-failure` | boots a second app instance with a **deliberately invalid anon key** and asserts the user is told the truth (5.5). See below |
+| `npm run verify:disposition` | prints the generated assertion-disposition block. `-- --write` rewrites it in `docs/VERIFICATION.md` |
+| `npm run check:disposition` | fails if the block committed in `docs/VERIFICATION.md` has drifted from `verify/lib/manifest.mjs` |
+| `npm run check:secrets` | repo-wide grep for key-shaped strings, plus a git-aware dotenv check |
 
 `npm run verify` targets the hosted project and **never falls back to a local database**.
 `npm run verify:local` is the only way to the embedded-Postgres path, and it is not a
 substitute: it does not cover identity issuance, JWT signing, JWT verification, PostgREST or
 session handling.
+
+### Proving the sign-in failure path — the deliberately invalid key
+
+A magic-link request that fails must say so. It used to not: every error class redirected to
+"check your email", so a wrong or rotated anon key looked exactly like success to all ~120
+reps. That branch never fires by accident, because everybody runs with a working key — so
+there is a command that makes it fire on purpose:
+
+```bash
+npm run verify:login-failure
+```
+
+It boots a **second** copy of this application as a child process on an ephemeral loopback
+port, with `NEXT_PUBLIC_SUPABASE_ANON_KEY` replaced by a deliberately invalid, non-key-shaped
+literal and `SUPABASE_SERVICE_ROLE_KEY` **deleted** from the child's environment. It then
+submits the login form and asserts the response redirects to `/login?error=unavailable` and
+**not** to `/login/check-email`, and that the server-side log line is still written. The child
+is killed on the way out and again on Ctrl-C. Nothing is asked for and no real key is used.
+
+`NEXT_PUBLIC_SUPABASE_URL` is passed through unchanged so the request reaches the configured
+gateway. To exercise the same branch without contacting the hosted project at all, point it at
+a non-routable host:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://offline.example.invalid npm run verify:login-failure
+```
+
+**`npm run verify` never boots it.** There, assertions `5.5a` and `5.5b` print
+`NOT EXECUTED` with the reason and name this command. Everything else about the failure path —
+the classification predicate, the rendered error page, and the assertion that a registered and
+an unregistered address get *indistinguishable* responses — runs without opting in.
+`docs/VERIFICATION.md` §7 is the full account.
 
 ### Environment variables
 

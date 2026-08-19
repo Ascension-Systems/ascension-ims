@@ -33,6 +33,14 @@ import attack1 from './hosted/01-rls-bypass.mjs'
 import attack2 from './hosted/02-concurrent-last-unit.mjs'
 import attack3 from './hosted/03-stale-baseline.mjs'
 import attack4 from './hosted/04-role-enforcement.mjs'
+import suite5, { SUITE_TITLE as SUITE5_TITLE } from './hosted/05-login-failure-modes.mjs'
+import { MANIFEST } from './lib/manifest.mjs'
+import {
+  checkDrift,
+  renderDrift,
+  computeDisposition,
+  renderDispositionBlock,
+} from './lib/disposition.mjs'
 
 const ATTACKS = [
   [1, 'RLS bypass', attack1],
@@ -42,6 +50,14 @@ const ATTACKS = [
 ]
 
 const BLOCKED_METHOD = 'not attempted — see the reason on the assertion line below.'
+
+/**
+ * Suite 5 is a REGRESSION SUITE, NOT A FIFTH ATTACK. The brief requires four attacks and this
+ * document set is structured around those four; suite 5 covers the magic-link request path's
+ * failure modes and is printed after them, counted separately, in the same way check:secrets
+ * is explicitly not one of the four.
+ */
+const REGRESSION = [5, SUITE5_TITLE, suite5]
 
 const RLS_SEMANTICS_NOTE = `
   A NOTE ON HOW A REFUSAL IS ASSERTED. Postgres raises 42501 for an INSERT that violates a
@@ -72,6 +88,8 @@ function banner(cfg, extra = []) {
       'Target        : the configured hosted Supabase project, over HTTPS.',
       'Channel       : PostgREST /rest/v1 + /rest/v1/rpc, GoTrue /auth/v1. No database',
       '                connection string is used, requested or accepted anywhere.',
+      'Also printed  : SUITE 5, a regression suite for the magic-link request path. It comes',
+      '                after the four and is counted separately. IT IS NOT A FIFTH ATTACK.',
       '',
       ...configProofLines(cfg),
       ...extra,
@@ -84,16 +102,31 @@ function banner(cfg, extra = []) {
 function abort(reason, detail) {
   const reports = ATTACKS.map(([n, title]) => blockedReport(n, title, BLOCKED_METHOD, reason))
   for (const r of reports) r.print(reason, { labelWord: 'Target' })
-  summarise(reports, { aborted: reason, abortDetail: detail })
+  const regression = blockedReport(REGRESSION[0], REGRESSION[1], BLOCKED_METHOD, reason, {
+    kindWord: 'suite',
+  })
+  regression.print(reason, { labelWord: 'Target', kindWord: 'SUITE' })
+  summarise(reports, { aborted: reason, abortDetail: detail, regression })
   process.exitCode = 1
 }
 
-function summarise(reports, { aborted = null, abortDetail = null, extraNotes = [] } = {}) {
+function summarise(
+  reports,
+  { aborted = null, abortDetail = null, extraNotes = [], regression = null } = {},
+) {
+  // The four attacks are totalled as the four attacks. Suite 5 is reported separately and is
+  // never folded into that figure, so "the four attacks" keeps its meaning.
   const totalExecuted = reports.reduce((n, r) => n + r.executed, 0)
   const totalPassed = reports.reduce((n, r) => n + r.passed, 0)
   const totalFailed = reports.reduce((n, r) => n + r.failed, 0)
   const totalStatic = reports.reduce((n, r) => n + r.statics, 0)
   const totalNotRun = reports.reduce((n, r) => n + r.notRun, 0)
+
+  const line = (word, r) =>
+    r.blocked
+      ? `  ${word} ${r.number}  ${r.title.padEnd(42)} ${r.blocked}`
+      : `  ${word} ${r.number}  ${r.title.padEnd(42)} ${r.ok ? 'PASS' : 'FAIL'}  (${r.passed}/${r.executed} executed` +
+        `${r.statics ? `, ${r.statics} static` : ''}${r.notRun ? `, ${r.notRun} not executed` : ''})`
 
   write(
     [
@@ -101,19 +134,25 @@ function summarise(reports, { aborted = null, abortDetail = null, extraNotes = [
       '='.repeat(78),
       'SUMMARY — npm run verify (hosted)',
       '='.repeat(78),
-      ...reports.map((r) =>
-        r.blocked
-          ? `  Attack ${r.number}  ${r.title.padEnd(42)} ${r.blocked}`
-          : `  Attack ${r.number}  ${r.title.padEnd(42)} ${r.ok ? 'PASS' : 'FAIL'}  (${r.passed}/${r.executed} executed` +
-            `${r.statics ? `, ${r.statics} static` : ''}${r.notRun ? `, ${r.notRun} not executed` : ''})`,
-      ),
+      ...reports.map((r) => line('Attack', r)),
       '',
       `  Executed against the hosted project : ${totalPassed} passed, ${totalFailed} failed, of ${totalExecuted}.`,
       `  STATIC (migration source, not deployed state) : ${totalStatic}.`,
       `  NOT EXECUTED (never counted as a pass)        : ${totalNotRun}.`,
       '',
+      ...(regression
+        ? [
+            '  SEPARATELY — not one of the four required attacks:',
+            line('Suite ', regression),
+            '',
+          ]
+        : []),
     ].join('\n') + '\n',
   )
+
+  // Suite 5's own NOT EXECUTED and STATIC entries are listed with everyone else's below: a
+  // non-execution that is not printed is a non-execution that gets forgotten.
+  if (regression) reports = [...reports, regression]
 
   if (aborted) {
     write(`  ${aborted}\n`)
@@ -231,7 +270,7 @@ async function main() {
       'AVAILABILITY ORACLE',
       `  ${oracle.label}`,
       '',
-      'APPLICATION UNDER TEST (2a.10, 4.9, 4.10)',
+      'APPLICATION UNDER TEST (2a.10, 4.9, 4.10, 5.3, 5.4)',
       app.usable
         ? `  reachable and the minted rep session is accepted. ${app.detail}`
         : `  ${app.reason}${app.detail ? `\n  ${app.detail}` : ''}`,
@@ -281,7 +320,23 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------- *
-   * 5. Teardown of this run's fixture rows. The test identities and any
+   * 5. Suite 5 — the magic-link failure-mode regression suite. Printed
+   *    after the four, counted separately, and never called an attack.
+   * ---------------------------------------------------------------- */
+  let regression = null
+  if (!hardError) {
+    const [number, title, suite] = REGRESSION
+    try {
+      regression = await suite(ctx)
+    } catch (err) {
+      regression = new Report(number, title, BLOCKED_METHOD)
+      regression.fail(`${number}.!`, `suite ${number} raised before completing`, err?.stack ?? String(err))
+    }
+    regression.print(targetLabel, { labelWord: 'Target', kindWord: 'SUITE' })
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 6. Teardown of this run's fixture rows. The test identities and any
    *    commitments they own survive deliberately — removing them is
    *    `npm run verify:identities:remove`, which is a separate, explicit
    *    step so a re-run does not have to re-mint sessions.
@@ -290,8 +345,10 @@ async function main() {
   try {
     const removed = await teardownFixtures(cfg, identities)
     teardownNotes.push(
-      `Teardown removed ${removed.commitments} commitment row(s) at location 'kyv-verify' and ` +
-        `${removed.products} KYV- product(s) (cascading their inventory rows). The two test ` +
+      `Teardown removed ${removed.commitments} commitment row(s) in the KYV namespace ` +
+        `(location 'kyv-verify', location 'kyv-verify-2', and any commitment on a KYV- sku at ` +
+        `any other location) and ${removed.products} KYV- product(s) (cascading their ` +
+        `inventory rows). The two test ` +
         `identities and the inventory_sync_runs rows this run created REMAIN — remove them with ` +
         `\`npm run verify:identities:remove\`.`,
     )
@@ -306,11 +363,19 @@ async function main() {
     write(`\nHARNESS ERROR: ${hardError.stack ?? hardError.message}\n`)
   }
 
-  summarise(reports, { extraNotes: teardownNotes })
+  summarise(reports, { extraNotes: teardownNotes, regression })
 
-  const anyFailed = reports.some((r) => !r.ok)
+  /* ---------------------------------------------------------------- *
+   * 7. Manifest drift, both directions, then the one authoritative
+   *    disposition — computed here, never hand-counted anywhere.
+   * ---------------------------------------------------------------- */
+  const drift = checkDrift(MANIFEST, regression ? [...reports, regression] : reports, 'hosted')
+  write(renderDrift(drift))
+  write('\n' + renderDispositionBlock(computeDisposition(MANIFEST)) + '\n\n')
+
+  const anyFailed = [...reports, ...(regression ? [regression] : [])].some((r) => !r.ok)
   const anyBlocking = reports.some((r) => r.isBlocked)
-  process.exitCode = hardError || anyFailed || anyBlocking ? 1 : 0
+  process.exitCode = hardError || anyFailed || anyBlocking || !drift.ok ? 1 : 0
 }
 
 main().catch((err) => {

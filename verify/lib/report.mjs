@@ -9,15 +9,19 @@
  * ------------------------------------------------------------------------------------
  * THE ONE RULE: NEVER PRINT PASS FOR ANYTHING NOT ACTUALLY EXECUTED.
  * ------------------------------------------------------------------------------------
- * Five statuses, and there is no sixth:
+ * FOUR statuses, and there is no fifth:
  *
  *   PASS          executed against the target, and it held
  *   FAIL          executed against the target, and it did not hold
  *   STATIC        a source-file assertion. Real, but it asserts the MIGRATION SOURCE,
  *                 not deployed state. Counted separately and never as a live pass.
  *   NOT EXECUTED  did not run, with a printed reason. Never counted as a pass.
- *   SKIP          the legacy label, kept only so the embedded-Postgres attack files are
- *                 unchanged by this pass. New code uses NOT EXECUTED.
+ *
+ * `SKIP` IS DELETED AND DOES NOT COME BACK. It was a fifth label that read like a decision
+ * ("we chose not to") when it meant the same thing as NOT EXECUTED ("it did not run"), and a
+ * status that softens a non-execution is exactly how a non-result gets quoted as a result.
+ * `docs/VERIFICATION.md` says four states; this file now says four states; there is no third
+ * opinion to reconcile.
  *
  * Totals are computed from what actually ran. Nothing here carries a hard-coded expected
  * assertion count, and nothing may be seeded with one.
@@ -26,7 +30,6 @@
 export const STATUS = {
   PASS: 'PASS',
   FAIL: 'FAIL',
-  SKIP: 'SKIP',
   STATIC: 'STATIC',
   NOT_EXECUTED: 'NOT EXECUTED',
 }
@@ -57,10 +60,6 @@ export class Report {
 
   fail(id, description, detail) {
     this.results.push({ id, description, status: STATUS.FAIL, kind: 'live', detail })
-  }
-
-  skip(id, description, reason) {
-    this.results.push({ id, description, status: STATUS.SKIP, kind: 'skip', detail: reason })
   }
 
   /**
@@ -150,10 +149,6 @@ export class Report {
     return this.results.filter((r) => r.status === STATUS.FAIL).length
   }
 
-  get skips() {
-    return this.results.filter((r) => r.status === STATUS.SKIP).length
-  }
-
   get statics() {
     return this.results.filter((r) => r.status === STATUS.STATIC).length
   }
@@ -184,11 +179,16 @@ export class Report {
    * Printing
    * ---------------------------------------------------------------- */
 
-  print(targetLabel, { labelWord = 'Path' } = {}) {
+  /**
+   * `kindWord` exists so suite 5 can print as SUITE and not as ATTACK. The brief requires four
+   * attacks, `docs/VERIFICATION.md` is structured around those four, and a regression suite
+   * printing itself as "ATTACK 5" would quietly turn four into five.
+   */
+  print(targetLabel, { labelWord = 'Path', kindWord = 'ATTACK' } = {}) {
     const width = 58
     const lines = []
     lines.push('')
-    lines.push(`ATTACK ${this.number} — ${this.title}`)
+    lines.push(`${kindWord} ${this.number} — ${this.title}`)
     lines.push(`  ${labelWord}:${' '.repeat(Math.max(1, 8 - labelWord.length))}${targetLabel}`)
     lines.push(`  Method: ${this.method.trim().split('\n').join('\n          ')}`)
     for (const r of this.results) {
@@ -209,7 +209,6 @@ export class Report {
       const parts = [`${this.passed}/${this.executed} executed`]
       if (this.statics) parts.push(`${this.statics} STATIC`)
       if (this.notRun) parts.push(`${this.notRun} NOT EXECUTED`)
-      if (this.skips) parts.push(`${this.skips} skipped`)
       lines.push(`  RESULT: ${this.ok ? 'PASS' : 'FAIL'} (${parts.join(', ')})`)
     }
     for (const note of this.notes ?? []) {
@@ -224,10 +223,10 @@ export class Report {
  * configuration is absent, the endpoint is unreachable, or the schema is not applied — so
  * the runner still prints a per-attack verdict rather than an empty result set.
  */
-export function blockedReport(number, title, method, reason) {
+export function blockedReport(number, title, method, reason, { kindWord = 'attack' } = {}) {
   const report = new Report(number, title, method)
   report.blocked = reason
-  report.notExecuted(`${number}.*`, `every assertion in attack ${number}`, reason, {
+  report.notExecuted(`${number}.*`, `every assertion in ${kindWord} ${number}`, reason, {
     blocking: true,
   })
   return report

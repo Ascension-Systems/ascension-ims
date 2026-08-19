@@ -93,3 +93,34 @@
   flex-direction: column;
   gap: var(--space-4);
 }
+
+/* Error variant of .notice. ACHROMATIC: ink on paper only, no colour token anywhere. The
+   distinction from .notice is carried by border weight, an icon, a label and position —
+   never by colour. All four channels are load-bearing: UI may tune the glyph, the border
+   weight and the spacing, but may not remove a channel, introduce a colour token here, or
+   replace this with a shared React component. */
+.noticeError {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 4px solid var(--ink);
+  font-size: var(--text-components);
+}
+
+.noticeIcon {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.noticeLabel {
+  display: block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--text-label);
+}
+
+.noticeText {
+  display: block;
+}

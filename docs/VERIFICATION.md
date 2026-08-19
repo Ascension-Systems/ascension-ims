@@ -8,15 +8,23 @@ statement this document previously opened with ("Ferb has no live database crede
 must not be given any") was true when written and stopped being true when the Human supplied
 a hosted Supabase project. `npm run verify` runs the four attacks against
 `rakslwwxduovcqnuercz` over HTTPS, using real GoTrue-issued sessions. The embedded-Postgres
-path survives as `npm run verify:local`, demoted and relabelled — §1 and §7 below.
+path survives as `npm run verify:local`, demoted and relabelled — §1 and §8 below.
 
 **Assertions are made against a real database, never against mocks.** A mocked RLS policy
 proves nothing; that is the whole point of these four.
 
 **Never print PASS for anything not actually executed.** Every assertion ends as `PASS`,
 `FAIL`, `STATIC` (a labelled migration-source check) or `NOT EXECUTED` with a printed reason.
-There is no fifth state and no fallback between them. Totals are computed from what actually
-ran; no expected count is hard-coded anywhere.
+There is no fifth state and no fallback between them — `verify/lib/report.mjs` declares those
+four and no others. Totals are computed from what actually ran; no expected count is
+hard-coded anywhere.
+
+**No count in this document is written by hand.** Every figure describing the assertion
+inventory lives in one generated region in §8, produced by `npm run verify:disposition` from
+`verify/lib/manifest.mjs` and checked by `npm run check:disposition`. The prose deliberately
+carries none, because a prose figure has no mechanism keeping it true: two people counting
+this document previously produced two different wrong answers, and neither was reproducible
+from anything in the repository.
 
 ---
 
@@ -169,12 +177,13 @@ The last-unit test SKU is `SEA-9006`, pinned by the seed generator with
 
 `verify/hosted/01-rls-bypass.mjs` (hosted) and `verify/01-rls-bypass.mjs` (local).
 
-> **Hosted:** 16 of the 17 assertions run live over PostgREST against real GoTrue sessions.
-> `1.12` is a labelled **STATIC** check of `supabase/migrations/0008_inventory_view.sql`,
-> because `pg_class` is not exposed; no live proxy for it exists over this channel and none is
-> invented. Every write targets `KYV-0001`/`KYV-0002`/`KYV-0003` at `location = 'kyv-verify'`
-> — the `SEA-*` SKUs named in the table below are the local path's fixtures and are read-only
-> to the hosted harness.
+> **Hosted:** the assertions run live over PostgREST against real GoTrue sessions, with one
+> exception: `1.12` is a labelled **STATIC** check of
+> `supabase/migrations/0008_inventory_view.sql`, because `pg_class` is not exposed; no live
+> proxy for it exists over this channel and none is invented. The counts are in the
+> disposition block in §8. Every write targets `KYV-0001`/`KYV-0002`/`KYV-0003` at
+> `location = 'kyv-verify'` — the `SEA-*` SKUs named in the table below are the local path's
+> fixtures and are read-only to the hosted harness.
 
 **Method.** Connect as `rep` (identity 1) and query directly over SQL, not through the UI.
 An admin-session control run confirms the rows actually exist, so that a refusal is
@@ -309,9 +318,12 @@ looks right fails: if the baseline update and the state change were in separate 
 
 `verify/hosted/04-role-enforcement.mjs` (hosted) and `verify/04-role-enforcement.mjs` (local).
 
-> **Hosted:** all 17 assertions run live, two of them (4.9, 4.10) conditional on
-> `PORTAL_BASE_URL` being set and on the app accepting the harness-minted session. Writes
-> target `KYV-0001` and `KYV-0002`, never `SEA-9007`.
+> **Hosted:** the assertions run live over PostgREST against real GoTrue sessions. Three are
+> **conditional**: `4.9` and `4.10` on `PORTAL_BASE_URL` being set and on the app accepting the
+> harness-minted session, and `4.12b` on the current `inventory_authority` being readable
+> (`04-role-enforcement.mjs`). A conditional whose precondition does not hold is reported
+> NOT EXECUTED with its reason and is never counted as a pass. The counts are in the
+> disposition block in §8. Writes target `KYV-0001` and `KYV-0002`, never `SEA-9007`.
 >
 > **4.12b** reads `inventory_authority` and writes **that same value** back, asserting 1 row
 > affected. `app_settings` is a singleton with no disposable copy, and over PostgREST the
@@ -319,11 +331,21 @@ looks right fails: if the baseline update and the state change were in separate 
 > authority mode. The affected-row count is 1 either way, so the policy is proven exactly as
 > strongly; the `WHERE` clause stays identical to 4.4's, which is the evidential point.
 >
-> **4.10** is stated in the table below as "401". `middleware.ts` matches `/api/*` and
-> redirects an unauthenticated request to `/login` **before** the route handler runs, so the
-> route's own 401 is never reached. That redirect is the refusal. The hosted assertion accepts
-> either form, prints which it observed, and corroborates it by asserting that no
-> `inventory_sync_runs` row appeared.
+> **4.10 asserts the 307, specifically.** `middleware.ts` matches `/api/*` and redirects an
+> unauthenticated request to `/login` **before** the route handler runs, so the route's own 401
+> is never reached. That redirect is the refusal, and it is what the assertion asserts:
+> `NextResponse.redirect(url)` with no init defaults to **307** and
+> `lib/supabase/middleware.ts:58` uses exactly that form, so the assertion requires HTTP 307
+> **and** a `Location` resolving to path `/login` **and** no new `inventory_sync_runs` row.
+>
+> It used to accept `401 || a redirect`, and that was a defect in the assertion. A disjunction
+> over two different mechanisms cannot fail on the wrong mechanism — it proved only that the
+> request did not succeed while wearing a much stronger label. The disjunction is gone.
+>
+> The route handler's own 401 is recorded as **`4.10b`, NOT EXECUTED**, on every run: it is
+> unreachable, because middleware refuses first. Middleware refusing first is a **stronger**
+> refusal, not a weaker one, so `middleware.ts` is deliberately **not** changed to make
+> `4.10b` reachable.
 
 Each admin-only action is invoked **directly** as a `rep`, at the layer where the check is
 claimed to live. Hiding a button is not access control and is not tested here.
@@ -339,7 +361,8 @@ claimed to live. Hiding a button is not access control and is not tested here.
 | 4.7 | `UPDATE profiles SET role='admin' WHERE id = auth.uid()` — self-promotion | RLS policy `profiles_update_admin` | `42501`; role still `rep` |
 | 4.8 | `INSERT INTO commitments …` directly | Absence of any INSERT policy | `42501` |
 | 4.9 | `POST /api/sync` over HTTP with a rep session | Route handler guard + the function guard beneath it | **403**, body `{"error":"FORBIDDEN_ROLE"}` |
-| 4.10 | `POST /api/sync` with **no** session | Route handler guard | **401** |
+| 4.10 | `POST /api/sync` with **no** session | `middleware.ts`, before the route handler | **307** redirect to `/login` (middleware refusal), and no new `inventory_sync_runs` row |
+| 4.10b | `POST /api/sync` with **no** session, reaching the route handler's own 401 | Route handler guard (`app/api/sync/route.ts`) | **NOT EXECUTED — unreachable: middleware refuses first** |
 | 4.11 | Same as 4.6 but as `anon` | `EXECUTE` revoked from `anon` (`0012`) | `42501` — the guard's NULL-uid branch is never reached |
 | 4.12 | Control: 4.1, 4.4 and 4.6 as `admin` | — | All **succeed**. Proves the tests are testing the role and not a blanket denial. |
 
@@ -364,10 +387,96 @@ through 4.8 bypass the route handlers entirely to prove it.
 
 ---
 
-## 7. Output contract
+## 7. Suite 5 — magic-link request failure modes (a regression suite, NOT a fifth attack)
+
+`verify/hosted/05-login-failure-modes.mjs`, plus `verify/login-predicate.mjs` and
+`verify/login-failure.mjs` as smaller entry points. The brief requires four attacks and §3–§6
+are those four; this suite is printed after them, counted separately in the disposition block
+below, and is never called an attack — the same way `check:secrets` is explicitly not one of
+the four.
+
+**The defect it exists to catch.** `requestMagicLink()` logged every error class and then
+redirected to `/login/check-email` regardless. With a wrong or rotated anon key, or during a
+Supabase incident, every rep saw "check your email", no email arrived and the portal looked
+healthy. The anti-enumeration intent behind that code is real and survives intact, but it only
+ever applied to *address-specific* conditions; "our auth provider is down" is not about the
+address, and hiding it protects nobody.
+
+`app/login/auth-error.ts` classifies the error into `SUPPRESSED` (address-specific: the same
+success page as before, server-side log only), `RATE_LIMITED`, or `UNAVAILABLE`. It branches on
+`status` and `code` and **never on message text**, the same house rule as `lib/errors.ts`. The
+default is `UNAVAILABLE`: anything unrecognised fails honestly rather than being reported as a
+sent email.
+
+| Group | What it asserts | When it runs |
+|---|---|---|
+| `5.1.x` | every branch of the classification predicate, executing the application's real `classifyAuthError` | always — no network, no credentials, no database. Also runs alone as `npm run verify:login-predicate` |
+| `5.2a–c` | the **real** hosted gateway's error shape for a deliberately invalid apikey, and that it classifies `UNAVAILABLE`. The observed `status` and `code` are recorded verbatim in the run notes | every hosted run |
+| `5.3a–d` | `/login?error=unavailable` and `?error=rate_limited` render their notices; `?invalid=1` still renders its pre-existing one; bare `/login` renders neither | when `PORTAL_BASE_URL` is set |
+| `5.4a–d` | **anti-enumeration:** a registered and an unregistered address get responses that are *indistinguishable* — same `Location`, byte for byte, no query string, same status code | when `PORTAL_BASE_URL` is set |
+| `5.5a–b` | **the defect itself:** an invalid anon key redirects to `/login?error=unavailable` and specifically **not** to `/login/check-email`, and the server-side log line survives | opt-in: `npm run verify:login-failure` |
+
+**5.1 executes the product's code, it does not mirror it.** `app/login/auth-error.ts` imports
+nothing — no package, no `@/` alias — so `tsc` compiles it standalone into `verify/.out` with
+CLI flags (`tsconfig.json` is neither touched nor used) and the harness imports the compiled
+artefact. A mirrored predicate would pass its own tests forever while the application diverged
+from it. If the compile fails, every 5.1 and 5.2 assertion is `NOT EXECUTED` with the compiler
+output as the reason: never PASS, never FAIL.
+
+**The 401 inference, and how 5.2 converts it into a measurement.** "HTTP 401 on `signInWithOtp`
+means the anon key is bad" is an inference from endpoint semantics — an unauthenticated
+endpoint has no legitimate reason to answer 401 — not a measured fact, and the invalid-key case
+is precisely the one that can arrive with `code` undefined, because it is rejected at the
+edge before GoTrue sees it. `5.2` calls the real gateway with a deliberately invalid apikey on
+every hosted run and records what actually came back. If Supabase ever answers something else,
+`5.2b` fails loudly instead of the portal failing silently.
+
+### How 5.5 is made reachable — the deliberately invalid key
+
+This is the branch that never fires by accident, because everyone runs with a valid key. So it
+is made to fire on purpose:
+
+```bash
+npm run verify:login-failure
+```
+
+`verify/login-failure.mjs` boots a **second** copy of the application as a child process on an
+ephemeral loopback port, with `NEXT_PUBLIC_SUPABASE_ANON_KEY` replaced by a deliberately
+invalid, non-key-shaped literal and `SUPABASE_SERVICE_ROLE_KEY` **deleted** from the child's
+environment. `NEXT_PUBLIC_SUPABASE_URL` is passed through unchanged, so the request reaches the
+configured gateway and gets its real answer; pointing it at a non-routable host exercises the
+same `UNAVAILABLE` branch without contacting the hosted project:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://offline.example.invalid npm run verify:login-failure
+```
+
+`next dev` is used rather than `next start`, so `NEXT_PUBLIC_*` is read at runtime on the server
+and no rebuild is needed. The child is killed in a `finally` block and again on `SIGINT`. **The
+default `npm run verify` never boots it** — there, `5.5a` and `5.5b` are `NOT EXECUTED` with the
+reason and this command named as the way to run them.
+
+Why `/login` still renders under an invalid key, which is what makes the mechanism work at all:
+`lib/supabase/middleware.ts` destructures only `data.user` and ignores the error, so an invalid
+key yields `user = null`; `/login` is in `PUBLIC_PATHS`, so the request passes through, and the
+login page itself calls no Supabase API. Only the Server Action does.
+
+**5.4 and 5.5 drive the form through the no-JS Server Action encoding** — the hidden
+`$ACTION_ID_*` field Next renders for clients without JavaScript — which is a **framework
+internal, pinned to next 15.5.23**. It is isolated to one helper function. If the field cannot
+be located, every assertion that depends on it is `NOT EXECUTED` with that reason; a framework
+rename is not a defect in this application and must never be reported as one. Likewise, if the
+per-address email throttle fires (5.4b sends a real magic link to a non-routable address and
+consumes that address's throttle), 5.4 reports `NOT EXECUTED — re-run after the throttle
+window` rather than failing.
+
+---
+
+## 8. Output contract
 
 `npm run verify` prints, in order: a banner naming the channel; a **booleans-only**
-configuration block; a read-only preflight; then each attack; then a summary.
+configuration block; a read-only preflight; each of the four attacks; suite 5, labelled
+`SUITE` and not `ATTACK`; a summary; the manifest-drift result; and the disposition block.
 
 The configuration block is `set` / `unset` and the project ref, and nothing else. **Never a
 fragment, prefix, suffix, length, character count, hash, checksum or masked form of any
@@ -394,19 +503,116 @@ ATTACK 2 — Concurrent commitment on the last unit
   2a.2 B is still blocked 500ms later while A holds the lock ... NOT EXECUTED
        ↳ PostgREST has no open transactions — …  Runs under `npm run verify:local`.
   2b.1 20-way swarm on 1 unit: exactly 1 succeeds ............ PASS
-  1.12 v_inventory carries security_invoker .................. STATIC
-       ↳ STATIC — asserts the migration source, not the deployed view. …
-  RESULT: PASS (14/14 executed, 9 NOT EXECUTED)
+  RESULT: PASS (…counts…)
   NOTE:   Serialisation outcome verified against hosted; blocking behaviour verified only
           under verify:local.
 ```
 
+The `RESULT:` line above is an **illustration of the shape, not of any run**. The real figures
+come from the run. This document contains no example of one, deliberately: the previous version
+of this block printed a split no run could produce and listed an attack 1 assertion under attack
+2, and it was believed for a full loop because it looked like output.
+
 The summary then lists **every** `NOT EXECUTED` assertion with its reason and **every**
 `STATIC` assertion with the note that it asserts migration source rather than deployed state.
 
-**No assertion count appears anywhere in this document, and none is hard-coded in the
-harness.** Totals are computed from what actually ran. A figure from a previous run against a
-different target is not a result.
+**No hand-written count of anything the code can count appears in this document.** The single,
+labelled exception is the generated region below, which `npm run verify:disposition` produces
+from `verify/lib/manifest.mjs` and `npm run check:disposition` verifies has not drifted. Totals
+in a run are computed from what actually ran. A figure from a previous run against a different
+target is not a result.
+
+### The assertion disposition
+
+Three artefacts locked to each other in both directions:
+
+- **`verify/lib/manifest.mjs`** declares one entry per assertion id, with its state on each path
+  (`live`, `conditional`, `static`, `not-executed`, `absent`).
+- **`checkDrift()`** runs at the end of *both* runners and compares the declaration against the
+  ids the run actually emitted, **in both directions** — emitted-but-not-declared and
+  declared-but-not-emitted. Any drift prints a `MANIFEST DRIFT` block and forces a non-zero
+  exit. That is what stops the manifest becoming a second stale document.
+- **`npm run check:disposition`** regenerates the block below in memory and exits non-zero if
+  the committed copy differs. `npm run verify:disposition -- --write` rewrites it.
+
+Why it is computed rather than counted: only a minority of these ids appear in this document in
+countable form at all. Attack 2 has no table, one call site in `03-stale-baseline.mjs` emits six
+assertions from a loop, and the single `4.12` row in §6 is three assertions in the code. A
+number describing generated output has to be generated.
+
+<!-- DISPOSITION:BEGIN — generated by `npm run verify:disposition`. Do not edit by hand. -->
+
+```
+ASSERTION DISPOSITION — computed from verify/lib/manifest.mjs by
+verify/lib/disposition.mjs. Nothing here is hand-counted, and no count of anything
+the code can count appears in the prose of docs/VERIFICATION.md.
+
+  THE FOUR REQUIRED ATTACKS (suites 1-4)
+
+    Total distinct assertion ids .................................. 97
+    Executable remotely  (npm run verify) ......................... 73
+      of which conditional on a precondition ...................... 6
+    STATIC — asserts the migration source, not deployed ........... 8
+    NOT EXECUTED on the hosted path ............................... 16
+
+    Executes live ONLY under npm run verify:local ................. 23
+    Executes live ONLY under npm run verify ....................... 5
+    Executes live on BOTH paths ................................... 68
+    Executes live on NEITHER path ................................. 1
+
+    68 + 23 + 5 + 1 = 97 (declared total 97)
+
+    Remote-only :
+      2a.10, 2b.0, 2b.2b, 4.9, 4.10
+    Neither     :
+      4.10b
+
+    Per suite (hosted / local, executable live or conditional):
+      suite 1: 17 ids — hosted 16 executable, 1 STATIC, 0 NOT EXECUTED | local 17 executable
+      suite 2: 23 ids — hosted 13 executable, 0 STATIC, 10 NOT EXECUTED | local 20 executable, 2 absent
+      suite 3: 39 ids — hosted 27 executable, 7 STATIC, 5 NOT EXECUTED | local 39 executable
+      suite 4: 18 ids — hosted 17 executable, 0 STATIC, 1 NOT EXECUTED | local 15 executable, 1 absent
+
+  REGRESSION SUITE 5 — magic-link request failure modes
+
+    Total distinct assertion ids .................................. 30
+    Executable remotely  (npm run verify) ......................... 28
+      of which conditional on a precondition ...................... 11
+    STATIC — asserts the migration source, not deployed ........... 0
+    NOT EXECUTED on the hosted path ............................... 2
+
+    Executes live ONLY under npm run verify:local ................. 0
+    Executes live ONLY under npm run verify ....................... 28
+    Executes live on BOTH paths ................................... 0
+    Executes live on NEITHER path ................................. 2
+
+    0 + 0 + 28 + 2 = 30 (declared total 30)
+
+    Remote-only :
+      5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
+      5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17, 5.2a, 5.2b, 5.2c, 5.3a, 5.3b, 5.3c, 5.3d, 5.4a,
+      5.4b, 5.4c, 5.4d
+    Neither     :
+      5.5a, 5.5b
+    Also run by `npm run verify:login-predicate` (17 ids):
+      5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
+      5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17
+    Opt-in      : 5.5a executes under `npm run verify:login-failure`
+    Opt-in      : 5.5b executes under `npm run verify:login-failure`
+
+    Per suite (hosted / local, executable live or conditional):
+      suite 5: 30 ids — hosted 28 executable, 0 STATIC, 2 NOT EXECUTED | local 0 executable, 30 absent
+
+  READ "executable remotely" AS A MAXIMUM, NOT A PROMISE. It counts the conditional
+  assertions as executable, and each of those has a precondition that can fail to hold:
+  PORTAL_BASE_URL set, the running app accepting the harness-minted session, app_settings
+  readable, service_role holding the UPDATE grant it needs. When a precondition does not
+  hold the assertion is reported NOT EXECUTED with its reason and is never counted as a
+  pass. The per-run figures the runner prints below its attacks are the actual result;
+  this block is the inventory those results are drawn from.
+```
+
+<!-- DISPOSITION:END -->
 
 Exit code is 0 only if nothing failed. A `NOT EXECUTED` is never counted as a pass. Missing
 configuration, an unreachable endpoint, an unapplied schema, an unapplied seed, a violated run
@@ -415,12 +621,16 @@ non-zero exit.
 
 `scripts/check-no-secrets.sh` runs separately and is **not** one of the four attacks: it greps
 the repo for key-shaped strings (`eyJ`-prefixed JWTs, `sb[a-z]*_`-prefixed keys, credential
-assignments), for a service-role key exposed via a `NEXT_PUBLIC_` prefix, for committed dotenv
-files, and for any environment value reaching stdout.
+assignments), for a service-role key exposed via a `NEXT_PUBLIC_` prefix, and for any
+environment value reaching stdout. Its dotenv scan is **git-aware**: it fails on a dotenv file
+that is *tracked by git* or that is present but *not gitignored*, repo-wide and at any depth. A
+dotenv file that is present and correctly ignored is reported `ok` — git is the authority on
+what can be committed, and a depth-limited `find` was both blind to deep files and wrong about
+a normal working tree.
 
 ---
 
-## 8. What cannot be verified in this environment
+## 9. What cannot be verified in this environment
 
 Stated plainly rather than papered over. Note that one bullet has **inverted** since the
 previous revision.
@@ -429,6 +639,16 @@ previous revision.
   bypasses email *by design* — `generateLink` plus `verifyOtp` is what makes unattended
   verification possible at all — so it proves nothing about whether a link actually reaches an
   inbox. Only a Human signing in can confirm that.
+- **The magic-link REQUEST path's failure modes — NO LONGER ON THIS LIST.** Distinct from
+  delivery, and now covered by suite 5 (§7): `5.1` the classification predicate, executing the
+  application's real code, on every run; `5.2` the real hosted gateway's error shape for an
+  invalid key, on every hosted run; `5.3` the rendered error page; `5.4` the anti-enumeration
+  equivalence of the registered and unregistered responses; `5.5` the whole path end to end
+  under a deliberately invalid anon key, on demand. **This does not make delivery verified. It
+  is not.** What remains uncovered *in the default run* is the single-process path from a real
+  invalid key to a rendered error page — `5.5` covers exactly that, on demand, via
+  `npm run verify:login-failure`, and is reported `NOT EXECUTED` in every run that does not opt
+  in.
 - **The hosted project's actual RLS state — NO LONGER ON THIS LIST.** It was unverifiable when
   the harness could only reach a local database. It becomes verifiable the moment the Human
   applies migrations 0001–0012 and runs `npm run verify`, which is what this tooling now
