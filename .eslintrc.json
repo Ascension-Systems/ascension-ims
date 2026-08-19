@@ -1,0 +1,25 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/lib/supabase/admin", "@/lib/supabase/admin"],
+            "message": "lib/supabase/admin.ts holds the service-role client and must never reach the browser. It may be imported only from app/api/** and lib/inventory-source.stub.ts (see the overrides block in this config)."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["app/api/**/*.ts", "lib/inventory-source.stub.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["node_modules/", ".next/", "verify/", "scripts/", "public/sw.js"]
+}

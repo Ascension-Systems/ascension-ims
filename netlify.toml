@@ -1,0 +1,15 @@
+# Netlify connects to this repository and deploys on push to `main`.
+# Pushing is a Human action: agents commit, they never push.
+#
+# Environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+# SUPABASE_SERVICE_ROLE_KEY) are set in the Netlify dashboard, never in this file.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"

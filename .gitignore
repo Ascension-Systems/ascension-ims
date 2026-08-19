@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+npm-debug.log*
+.netlify/
+.vercel/
+supabase/.temp/
+supabase/.branches/
+coverage/
+verify/.out/
+*.tsbuildinfo

@@ -1,0 +1,42 @@
+{
+  "name": "inventory-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authenticated, mobile-first inventory portal. Build-order step 1: auth + inventory view + seed data.",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "seed:generate": "node scripts/generate-seed.mjs",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "verify": "node verify/run-all.mjs",
+    "check:secrets": "bash scripts/check-no-secrets.sh"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.4",
+    "@supabase/supabase-js": "2.112.3",
+    "next": "15.5.23",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.8",
+    "@types/react-dom": "19.2.4",
+    "embedded-postgres": "18.4.0-beta.17",
+    "eslint": "8.57.1",
+    "eslint-config-next": "15.5.23",
+    "pg": "8.23.0",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "postcss": "8.5.26",
+    "sharp": "0.35.3"
+  }
+}

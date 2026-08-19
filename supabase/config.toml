@@ -1,0 +1,52 @@
+# Local Supabase CLI configuration. THIS FILE CONFIGURES THE LOCAL STACK ONLY.
+# Nothing in this build connects to, authenticates against, or runs anything on the hosted
+# Supabase project. Migrations are written and applied by hand by the Human.
+
+project_id = "inventory-portal"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.seed]
+enabled = true
+# 0003_seed_demo_delta.sql is deliberately NOT listed. It depends on at least one profile
+# existing (commitments reference profiles), and the verification harness needs SEA-9007 to
+# start from a known 40/10 baseline with no pre-existing commitment. The Human applies it by
+# hand after the first rep has signed in — see README.md.
+sql_paths = ["./seed/0001_seed_catalogue.sql", "./seed/0002_seed_fixtures.sql"]
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000/auth/callback", "http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+# Users are pre-provisioned by the Human (plan decision A1). Open magic-link registration
+# would let anyone on the internet into a client's inventory.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+double_confirm_changes = true
+
+[analytics]
+enabled = false
