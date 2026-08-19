@@ -25,6 +25,9 @@ import {
   renderDocRegion,
   DISPOSITION_BEGIN,
   DISPOSITION_END,
+  checkManifestIntegrity,
+  checkDispositionSums,
+  renderInvariantFailure,
 } from './lib/disposition.mjs'
 
 const DOC = join(REPO, 'docs', 'VERIFICATION.md')
@@ -39,7 +42,29 @@ function regionBounds(text) {
 
 function main() {
   const args = process.argv.slice(2)
-  const region = renderDocRegion(computeDisposition(MANIFEST))
+
+  /* ------------------------------------------------------------------ *
+   * BEFORE ANYTHING ELSE. --write would otherwise happily generate a
+   * block from a manifest carrying duplicate ids or an unknown state,
+   * commit it to the document, and --check would then agree with it
+   * forever. A generated figure is only as trustworthy as its source.
+   * ------------------------------------------------------------------ */
+  const totals = computeDisposition(MANIFEST)
+  const integrity = checkManifestIntegrity(MANIFEST)
+  const sums = checkDispositionSums(totals, MANIFEST)
+  if (!integrity.ok || !sums.ok) {
+    if (!integrity.ok) {
+      write(renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems))
+    }
+    if (!sums.ok) {
+      write(renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems))
+    }
+    write('Nothing was generated, written or checked. Fix verify/lib/manifest.mjs and re-run.\n')
+    process.exitCode = 1
+    return
+  }
+
+  const region = renderDocRegion(totals)
 
   if (args.includes('--write')) {
     const text = readFileSync(DOC, 'utf8')

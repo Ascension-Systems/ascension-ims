@@ -40,6 +40,9 @@ import {
   renderDrift,
   computeDisposition,
   renderDispositionBlock,
+  checkManifestIntegrity,
+  checkDispositionSums,
+  renderInvariantFailure,
 } from './lib/disposition.mjs'
 
 const ATTACKS = [
@@ -371,11 +374,26 @@ async function main() {
    * ---------------------------------------------------------------- */
   const drift = checkDrift(MANIFEST, regression ? [...reports, regression] : reports, 'hosted')
   write(renderDrift(drift))
-  write('\n' + renderDispositionBlock(computeDisposition(MANIFEST)) + '\n\n')
+
+  // The manifest's own integrity and the sum invariant. Neither needs config, network or a
+  // database, so they run on EVERY run of every runner — including one that aborted early.
+  // renderScope PRINTS the sum; these two ASSERT it, which is not the same thing.
+  const totals = computeDisposition(MANIFEST)
+  const integrity = checkManifestIntegrity(MANIFEST)
+  if (!integrity.ok) {
+    write(renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems))
+  }
+  const sums = checkDispositionSums(totals, MANIFEST)
+  if (!sums.ok) {
+    write(renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems))
+  }
+
+  write('\n' + renderDispositionBlock(totals) + '\n\n')
 
   const anyFailed = [...reports, ...(regression ? [regression] : [])].some((r) => !r.ok)
   const anyBlocking = reports.some((r) => r.isBlocked)
-  process.exitCode = hardError || anyFailed || anyBlocking || !drift.ok ? 1 : 0
+  process.exitCode =
+    hardError || anyFailed || anyBlocking || !drift.ok || !integrity.ok || !sums.ok ? 1 : 0
 }
 
 main().catch((err) => {

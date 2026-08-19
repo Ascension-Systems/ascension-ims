@@ -53,6 +53,9 @@ export const LOGIN_ERROR = {
   RATE_LIMITED: 'rate_limited',
 } as const
 
+/** The reason the default branch emits. Exported so the call site can key on it by identity. */
+export const UNCLASSIFIED_REASON = 'unavailable:unclassified'
+
 export type AuthFailureClass = 'SUPPRESSED' | 'RATE_LIMITED' | 'UNAVAILABLE'
 
 export type AuthErrorLike =
@@ -70,7 +73,7 @@ export type AuthErrorLike =
  * registered, which with ~120 named reps is a real user-enumeration leak. These keep today's
  * behaviour EXACTLY: the same success page, server-side log only.
  */
-const SUPPRESSED_CODES: ReadonlySet<string> = new Set([
+export const SUPPRESSED_CODES: ReadonlySet<string> = new Set([
   'user_not_found',
   'signup_disabled',
   'email_not_confirmed',
@@ -97,7 +100,7 @@ const SUPPRESSED_CODES: ReadonlySet<string> = new Set([
  * matching row in the 5.1 table in verify/login/predicate-cases.ts). Do not make that move
  * without the ruling, and do not delete this comment while the question is open.
  */
-const RATE_LIMIT_CODES: ReadonlySet<string> = new Set([
+export const RATE_LIMIT_CODES: ReadonlySet<string> = new Set([
   'over_request_rate_limit',
   'over_email_send_rate_limit',
 ])
@@ -135,5 +138,11 @@ export function classifyAuthError(error: AuthErrorLike): {
   }
   // THE GAP CASE. AuthUnknownError has neither status nor code, and so does any future shape we
   // have not seen. It lands here on purpose. Removing this branch recreates the defect.
-  return { klass: 'UNAVAILABLE', reason: 'unavailable:unclassified' }
+  //
+  // The reason is UNCLASSIFIED_REASON rather than a repeated literal so that the call site in
+  // actions.ts can recognise THIS branch by identity and log the UNCLASSIFIED_AUTH_ERROR
+  // marker. Widening that recognition to any other UNAVAILABLE reason would make the marker
+  // meaningless: `unavailable:401`, `unavailable:network`, `unavailable:5xx`,
+  // `unavailable:null-error` and `unavailable:threw` are all classified branches, not this one.
+  return { klass: 'UNAVAILABLE', reason: UNCLASSIFIED_REASON }
 }

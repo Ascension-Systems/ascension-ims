@@ -15,7 +15,20 @@
  */
 
 import { Report, STATUS } from './lib/report.mjs'
-import { compilePredicate, runPredicateTable } from './hosted/05-login-failure-modes.mjs'
+import { MANIFEST } from './lib/manifest.mjs'
+import {
+  computeDisposition,
+  checkManifestIntegrity,
+  checkDispositionSums,
+  checkSubsetDrift,
+  subsetDriftProblems,
+  renderInvariantFailure,
+} from './lib/disposition.mjs'
+import {
+  compilePredicate,
+  runPredicateTable,
+  runPredicateTableInvariants,
+} from './hosted/05-login-failure-modes.mjs'
 
 const METHOD = `the product's own classifyAuthError is compiled standalone with tsc into
 verify/.out and executed over every row of verify/login/predicate-cases.ts.
@@ -38,6 +51,10 @@ async function main() {
   const report = new Report(5, 'Magic-link error classification — the predicate table', METHOD)
   const compiled = await compilePredicate()
   runPredicateTable(report, compiled)
+  // 5.C — the invariants BETWEEN the table and the predicate's own code sets. STATIC: they
+  // assert source shape, not deployed state, so they are counted separately and never as a
+  // live pass. They need nothing this runner does not already have.
+  runPredicateTableInvariants(report, compiled)
   report.print('app/login/auth-error.ts (compiled from source)', {
     labelWord: 'Target',
     kindWord: 'SUITE',
@@ -52,8 +69,43 @@ async function main() {
     )
   }
 
+  /* ------------------------------------------------------------------ *
+   * The manifest invariants, and this runner's reconciliation against
+   * the slice of the manifest it owns. None of it needs config, network
+   * or a database, which is exactly why it belongs in the cheap gate.
+   *
+   * checkDrift is deliberately NOT used here — see checkSubsetDrift.
+   * ------------------------------------------------------------------ */
+  const integrity = checkManifestIntegrity(MANIFEST)
+  if (!integrity.ok) {
+    process.stdout.write(
+      renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems),
+    )
+  }
+  const sums = checkDispositionSums(computeDisposition(MANIFEST), MANIFEST)
+  if (!sums.ok) {
+    process.stdout.write(
+      renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems),
+    )
+  }
+  const subset = checkSubsetDrift(
+    MANIFEST,
+    report,
+    (e) => e.alsoRuns === 'verify:login-predicate',
+    '`npm run verify:login-predicate`',
+  )
+  if (!subset.ok) {
+    process.stdout.write(
+      renderInvariantFailure(
+        'SUBSET DRIFT — this runner and the manifest disagree about which ids it owns.',
+        subsetDriftProblems(subset),
+      ),
+    )
+  }
+
   process.stdout.write('\n')
-  process.exitCode = report.failed === 0 && notRun.length === 0 ? 0 : 1
+  process.exitCode =
+    report.failed === 0 && notRun.length === 0 && integrity.ok && sums.ok && subset.ok ? 0 : 1
 }
 
 main().catch((err) => {

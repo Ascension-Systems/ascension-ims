@@ -563,3 +563,90 @@ the reading taken and reversing it is a one-line change:
 - **The plan is smaller than the build it describes**, which is where it should be. If a step-2
   or step-3 revision starts pushing these documents toward transcript length, that is worth
   catching in the retrospective.
+
+---
+
+## Revision — 2026-08-19: the unclassified-error default, and what it costs
+
+Appended, not merged. §8, §9 and §10 above stand as written and are not rewritten.
+
+**One point in §10 is superseded, and only that one.** The note that `Edit` was unavailable, and
+the consequence drawn from it — that revisions to this plan should go into a separate dated
+document rather than be appended here — no longer applies. `Edit` is available and `docs/PLAN.md`
+is in scope, so this revision is appended in place. Everything else in §10, including the reason
+the plan is four documents rather than one, is unchanged and still accurate.
+
+### The decision
+
+Two directions were safe, and they point opposite ways.
+
+- **A — chosen.** An auth error matching no known `status`/`code` branch classifies
+  **UNAVAILABLE**. The caller is told the portal cannot send; the address is never mentioned.
+- **B — rejected.** Default to **SUPPRESSED**, so an unseen code could never leak whether an
+  address is registered.
+
+Both are defensible. This is a genuine conflict between two safe directions, not a case of one
+being an oversight, and it is recorded here for that reason.
+
+### Why A
+
+The failure B prevents is **total**. A wrong or rotated anon key makes the portal look healthy
+while none of the ~120 reps can sign in, and the only evidence is a server-side log line nobody
+is watching. That is the exact defect this whole strand of work exists to remove, and B
+reintroduces the class of it: an unrecognised error would be answered with the success page.
+
+The failure A risks is **narrow and conjunctive**. It requires a dependency bump that renames an
+address-specific code out of `SUPPRESSED_CODES`, **and** an attacker probing addresses. What it
+yields is whether one address is registered — real, but bounded, and it does not compound.
+
+A total failure with no alarm on it outranks a narrow one that needs two independent things to
+go wrong first. That is the trade, made explicitly.
+
+### What A costs
+
+The anti-enumeration property is **no longer guaranteed by the classifier alone**. It is
+guaranteed by the classifier **plus assertion 5.4**. That is a real change in where the property
+lives, and it must be written down rather than assumed, because a future reader looking only at
+`app/login/auth-error.ts` would not be able to see it.
+
+If a rename moves an address-specific code out of the suppressed set, the unregistered address is
+answered `/login?error=unavailable` while the registered one is answered `/login/check-email`,
+the two responses stop being indistinguishable, and 5.4 fails. **That is why 5.4 is blocking, not
+advisory** — it is a `report.check`, a failed `check` records `FAIL`, a `FAIL` makes the suite's
+report not `ok`, and the runner exits non-zero on it. There is no warning tier for it to land in.
+It is also why the 5.4 comparison is now structurally incapable of reporting `NOT EXECUTED` once
+both responses are in hand: the preconditions live in a function that is never given the report,
+and the comparison is given a verdict-only view whose `notExecuted` throws. `NOT EXECUTED` and
+`FAIL` mean opposite things, and this ruling depends on 5.4 being able to say the second one.
+
+### Where the mitigation is not in force
+
+5.4 is conditional on `PORTAL_BASE_URL`. When it degrades to `NOT EXECUTED` for a genuine
+precondition, the mitigation **did not run for that run**, and the run says so rather than
+implying otherwise. A run that could not execute 5.4 is not a run in which the anti-enumeration
+property was demonstrated. Absence of evidence, printed as absence of evidence.
+
+### The rate-limit asymmetry — behaviour unchanged, but do not lose this
+
+5.4 degrades every one of its ids to `NOT EXECUTED` when *either* response is rate-limited. With
+`shouldCreateUser: false` the email-send path is reached only for registered addresses, so
+`over_email_send_rate_limit` fires only for a registered address — the open question already
+recorded in `app/login/auth-error.ts`. It follows that a run in which **only the registered
+address** is throttled is *itself* the enumeration signal that open question describes. The
+harness is right to decline to assert on a throttled run, but a one-sided throttle is evidence,
+not noise, and whoever sees one should be reading that open question rather than re-running until
+it clears. The Human sanctioned "throttle fired → `NOT EXECUTED`"; the behaviour stands as
+sanctioned, and this paragraph exists so the signal is not mistaken for a flake.
+
+### A concrete case the default catches
+
+`@supabase/auth-js` throws `AuthUnknownError` when the response body will not parse as JSON and
+the status is not in its network-error list (`lib/fetch.js:49`), and `AuthUnknownError` carries
+neither `status` nor `code` (`lib/errors.js:79-85`). So a gateway 401 delivered as an HTML edge
+error page — precisely the invalid-anon-key shape the inference note in `app/login/auth-error.ts`
+describes — does **not** reach the 401 branch. It falls to the default and lands
+`unavailable:unclassified`, and the portal fails honestly anyway. Under B it would have shown the
+success page. This is the branch `UNCLASSIFIED_AUTH_ERROR` exists to make findable: the call site
+in `app/login/actions.ts` logs that marker on that reason alone, carrying `status`, `code` and
+`name` and never the address, so the case can be grepped out of a production log instead of being
+reconstructed from a redirect.

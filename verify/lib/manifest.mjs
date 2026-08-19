@@ -6,10 +6,13 @@
  * ------------------------------------------------------------------------------------
  * Two people previously produced two different answers to "how many assertions are there",
  * and both were wrong, because the question was being answered by counting a DOCUMENT. Only
- * 35 of the ids below appear in `docs/VERIFICATION.md` in countable form: attack 2 has no
- * table at all, one call site in `03-stale-baseline.mjs` generates SIX assertions from a
- * loop, and the single `4.12` row in the doc is three assertions in the code. No amount of
- * care fixes that by hand. An unreproducible number is not a measurement.
+ * a minority of the ids below appear in `docs/VERIFICATION.md` in countable form: attack 2 has
+ * no table at all, one call site in `03-stale-baseline.mjs` generates A FAMILY of assertions
+ * from a loop, and the single `4.12` row in the doc is several assertions in the code. No
+ * amount of care fixes that by hand. An unreproducible number is not a measurement.
+ *
+ * The figures that used to sit in this paragraph were accurate when written and had no
+ * mechanism keeping them so — the same defect one file over. They are gone for that reason.
  *
  * So the disposition is COMPUTED from this file (`verify/lib/disposition.mjs`), printed by
  * the harness on every run, and written into `docs/VERIFICATION.md` only inside a generated,
@@ -167,6 +170,17 @@ export const MANIFEST = [
   { id: '5.1.15',    suite: 5, hosted: 'live',          local: 'absent', alsoRuns: 'verify:login-predicate' },
   { id: '5.1.16',    suite: 5, hosted: 'live',          local: 'absent', alsoRuns: 'verify:login-predicate' },
   { id: '5.1.17',    suite: 5, hosted: 'live',          local: 'absent', alsoRuns: 'verify:login-predicate' },
+
+  // 5.C — invariants between the 5.1 table and the predicate's own exported code sets. STATIC
+  // on the hosted path because they assert the SHAPE of a source table, not deployed state;
+  // absent locally because suite 5 has no local path at all. They therefore appear under
+  // "Executes live on NEITHER path", which is correct and is explained in the disposition block.
+  { id: '5.C1',      suite: 5, hosted: 'static',        local: 'absent', alsoRuns: 'verify:login-predicate' },
+  { id: '5.C2',      suite: 5, hosted: 'static',        local: 'absent', alsoRuns: 'verify:login-predicate' },
+  { id: '5.C3',      suite: 5, hosted: 'static',        local: 'absent', alsoRuns: 'verify:login-predicate' },
+  { id: '5.C4',      suite: 5, hosted: 'static',        local: 'absent', alsoRuns: 'verify:login-predicate' },
+  { id: '5.C5',      suite: 5, hosted: 'static',        local: 'absent', alsoRuns: 'verify:login-predicate' },
+
   { id: '5.2a',      suite: 5, hosted: 'conditional',   local: 'absent' },
   { id: '5.2b',      suite: 5, hosted: 'conditional',   local: 'absent' },
   { id: '5.2c',      suite: 5, hosted: 'conditional',   local: 'absent' },

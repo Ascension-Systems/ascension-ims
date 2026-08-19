@@ -259,14 +259,14 @@ Assertions:
 
 ### 4b. Stochastic swarm — catches what a fixed interleaving can miss
 
-Reset `SEA-9006` to `qty_on_hand = 1`, then fire **20 connections** calling
-`record_commitment('SEA-9006', 1)` simultaneously via `Promise.all`.
+Reset `SEA-9006` to `qty_on_hand = 1`, then fire a swarm of concurrent callers (`SWARM_SIZE` in
+`verify/hosted/02-concurrent-last-unit.mjs`) at `record_commitment('SEA-9006', 1)`.
 
-Assertions: exactly **1** fulfilled, exactly **19** rejected with `KY001`, exactly 1 pending
-commitment row, `qty_available` = 0.
+Assertions: exactly one call is fulfilled, every other is rejected with `KY001`, exactly one
+pending commitment row exists, and `qty_available` is 0.
 
-A third variant sets `qty_on_hand = 3` and fires 20 callers: exactly 3 succeed, 17 fail,
-`qty_available` = 0. This catches an off-by-one that a 1-unit test would not.
+A third variant sets `qty_on_hand = 3` and fires the same swarm: exactly three succeed, every
+other is refused, `qty_available` is 0 — this catches an off-by-one a 1-unit test would not.
 
 **Failure of this test is a design failure, not a flake.** If it fails, the fix is in
 `record_commitment`, not in the test.
@@ -298,7 +298,7 @@ Fixture: `SEA-9007`, `qty_on_hand = 40`, `qty_committed = 10` → `qty_available
 |---|---|---|
 | 3.1 | As rep: `record_commitment('SEA-9007', 6)` | `qty_available` drops 30 → **24**. `qty_committed_portal` = 6. Commitment state `pending`. |
 | 3.2 | Run `apply_inventory_sync` with the **same baseline** (`on_hand 40, committed 10`) and **`matches: []`** — a source that has not caught up | Commitment still **`pending`**. `qty_available` still **24**. `run.commitments_still_pending` = 1. |
-| 3.3 | Run the same sync **five more times** | Still `pending`, still 24. No accumulation of syncs retires it. |
+| 3.3 | Run the same sync **several more times** | Still `pending`, still 24. No accumulation of syncs retires it. |
 | 3.4 | Age the commitment: `UPDATE commitments SET created_at = now() - interval '30 days'` — via a direct owner-connection, since the trigger forbids it for clients; the harness notes it is simulating elapsed time | Still `pending`, still 24. **Elapsed time changes nothing.** |
 | 3.5 | Run the sync again after ageing | Still `pending`, still 24. |
 | 3.6 | Static assertion on the source: `apply_inventory_sync`'s body contains no `interval`, no `age(`, and no `now() -` in the retirement block | Passes. Guards against a future "helpful" cleanup being added. |
@@ -318,9 +318,10 @@ looks right fails: if the baseline update and the state change were in separate 
 
 `verify/hosted/04-role-enforcement.mjs` (hosted) and `verify/04-role-enforcement.mjs` (local).
 
-> **Hosted:** the assertions run live over PostgREST against real GoTrue sessions. Three are
-> **conditional**: `4.9` and `4.10` on `PORTAL_BASE_URL` being set and on the app accepting the
-> harness-minted session, and `4.12b` on the current `inventory_authority` being readable
+> **Hosted:** the assertions run live over PostgREST against real GoTrue sessions. The
+> **conditional** ones are `4.9` and `4.10`, on `PORTAL_BASE_URL` being set and on the app
+> accepting the harness-minted session, and `4.12b`, on the current `inventory_authority` being
+> readable
 > (`04-role-enforcement.mjs`). A conditional whose precondition does not hold is reported
 > NOT EXECUTED with its reason and is never counted as a pass. The counts are in the
 > disposition block in §8. Writes target `KYV-0001` and `KYV-0002`, never `SEA-9007`.
@@ -407,6 +408,64 @@ success page as before, server-side log only), `RATE_LIMITED`, or `UNAVAILABLE`.
 `status` and `code` and **never on message text**, the same house rule as `lib/errors.ts`. The
 default is `UNAVAILABLE`: anything unrecognised fails honestly rather than being reported as a
 sent email.
+
+### The unclassified-error default, and what it costs
+
+Two directions were safe here, and they point opposite ways.
+
+- **A — chosen.** An auth error matching no known `status`/`code` branch classifies
+  **UNAVAILABLE**. The caller is told the portal cannot send, and the address is never mentioned.
+- **B — rejected.** Default to **SUPPRESSED**, so an unseen code can never leak whether an
+  address is registered.
+
+**Why A.** The failure B prevents is *total*. A wrong or rotated anon key makes the portal look
+healthy while none of the ~120 reps can sign in, evidenced only by a log nobody is watching. The
+failure A risks is *narrow and conjunctive*: it needs a dependency bump that renames an
+address-specific code out of `SUPPRESSED_CODES` **and** an attacker probing addresses, and what
+it yields is only whether one address is registered.
+
+**What A costs, stated plainly.** The anti-enumeration property is no longer guaranteed by the
+classifier alone. It is guaranteed by the classifier **plus assertion 5.4**. If such a rename
+happens, the unregistered address is answered `/login?error=unavailable` while the registered one
+is answered `/login/check-email`, the two responses stop being indistinguishable, and 5.4 fails.
+
+**That is why 5.4 is blocking, and the chain is not a matter of anyone's care.** Each `5.4`
+comparison is a `report.check`; a `check` whose condition does not hold calls `fail()`, which
+records `STATUS.FAIL`; any `FAIL` makes that report's `ok` false; `run-all.mjs` folds the
+regression suite into `anyFailed` alongside the four attacks and exits non-zero on it. There is
+no warning tier for 5.4 to land in. It is also why the comparison is now structurally unable to
+report `NOT EXECUTED` once both responses are in hand: `resolveEquivalenceInputs` owns every
+precondition and never sees the report, and `assertEquivalence` is handed a verdict-only view
+whose `notExecuted` throws. `NOT EXECUTED` and `FAIL` mean opposite things — "we have no
+evidence" against "we have evidence and it differed" — and the ruling above rests on 5.4 being
+able to say the second one.
+
+**Where the mitigation is not in force.** 5.4 is conditional on `PORTAL_BASE_URL`. When it
+degrades to `NOT EXECUTED` for a genuine precondition — no base URL, the app unreachable, the
+no-JS Server Action encoding not locatable — the mitigation did not run for that run, and the
+run says so on every affected assertion line and again in the summary. Absence of evidence,
+printed as absence of evidence, never quietly as a pass.
+
+**The rate-limit asymmetry — this is behaviour, and it is not being changed.** 5.4 degrades
+every one of its ids to `NOT EXECUTED` when *either* response is rate-limited. With
+`shouldCreateUser: false` the email-send path is reached only for registered addresses, so
+`over_email_send_rate_limit` fires only for a registered address — the open question recorded in
+`app/login/auth-error.ts`. A run in which **only the registered address** is throttled is
+therefore *itself* the enumeration signal that question describes. The harness declines to assert
+on it, which is correct, but a one-sided throttle is evidence, not noise: a reader who sees one
+should read that open question rather than simply re-run. The Human sanctioned "throttle fired →
+`NOT EXECUTED`"; the behaviour stands as sanctioned.
+
+**A concrete case the default catches.** `@supabase/auth-js` throws `AuthUnknownError` when the
+response body will not parse as JSON and the status is not in its network-error list
+(`lib/fetch.js:49`), and `AuthUnknownError` carries neither `status` nor `code`
+(`lib/errors.js:79-85`). So a gateway 401 delivered as an HTML edge error page — precisely the
+invalid-anon-key shape the inference note in `app/login/auth-error.ts` describes — does **not**
+reach the 401 branch. It falls through to the default and lands `unavailable:unclassified`, and
+the portal still fails honestly. That branch is the one `UNCLASSIFIED_AUTH_ERROR` exists to make
+findable: `app/login/actions.ts` logs that marker, on that reason only, carrying `status`, `code`
+and `name` and never the address, so the case can be grepped out of a production log instead of
+inferred from a redirect.
 
 | Group | What it asserts | When it runs |
 |---|---|---|
@@ -498,11 +557,11 @@ Per attack:
 ```
 ATTACK 2 — Concurrent commitment on the last unit
   Target:  hosted Supabase project rakslwwxduovcqnuercz (PostgREST + GoTrue over HTTPS)
-  Method: 20 unawaited HTTPS requests to the record_commitment RPC …
+  Method: unawaited HTTPS requests to the record_commitment RPC …
   2a.0 KYV-0004 starts with availability of exactly 1 ........ PASS
   2a.2 B is still blocked 500ms later while A holds the lock ... NOT EXECUTED
        ↳ PostgREST has no open transactions — …  Runs under `npm run verify:local`.
-  2b.1 20-way swarm on 1 unit: exactly 1 succeeds ............ PASS
+  2b.1 swarm on 1 unit: exactly 1 succeeds ….. PASS
   RESULT: PASS (…counts…)
   NOTE:   Serialisation outcome verified against hosted; blocking behaviour verified only
           under verify:local.
@@ -536,9 +595,9 @@ Three artefacts locked to each other in both directions:
   the committed copy differs. `npm run verify:disposition -- --write` rewrites it.
 
 Why it is computed rather than counted: only a minority of these ids appear in this document in
-countable form at all. Attack 2 has no table, one call site in `03-stale-baseline.mjs` emits six
-assertions from a loop, and the single `4.12` row in §6 is three assertions in the code. A
-number describing generated output has to be generated.
+countable form at all. Attack 2 has no table, one call site in `03-stale-baseline.mjs` emits a
+family of assertions from a loop, and the single `4.12` row in §6 is several assertions in the
+code. A number describing generated output has to be generated.
 
 <!-- DISPOSITION:BEGIN — generated by `npm run verify:disposition`. Do not edit by hand. -->
 
@@ -575,33 +634,33 @@ the code can count appears in the prose of docs/VERIFICATION.md.
 
   REGRESSION SUITE 5 — magic-link request failure modes
 
-    Total distinct assertion ids .................................. 30
+    Total distinct assertion ids .................................. 35
     Executable remotely  (npm run verify) ......................... 28
       of which conditional on a precondition ...................... 11
-    STATIC — asserts the migration source, not deployed ........... 0
+    STATIC — asserts the migration source, not deployed ........... 5
     NOT EXECUTED on the hosted path ............................... 2
 
     Executes live ONLY under npm run verify:local ................. 0
     Executes live ONLY under npm run verify ....................... 28
     Executes live on BOTH paths ................................... 0
-    Executes live on NEITHER path ................................. 2
+    Executes live on NEITHER path ................................. 7
 
-    0 + 0 + 28 + 2 = 30 (declared total 30)
+    0 + 0 + 28 + 7 = 35 (declared total 35)
 
     Remote-only :
       5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
       5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17, 5.2a, 5.2b, 5.2c, 5.3a, 5.3b, 5.3c, 5.3d, 5.4a,
       5.4b, 5.4c, 5.4d
     Neither     :
-      5.5a, 5.5b
-    Also run by `npm run verify:login-predicate` (17 ids):
+      5.C1, 5.C2, 5.C3, 5.C4, 5.C5, 5.5a, 5.5b
+    Also run by `npm run verify:login-predicate` (22 ids):
       5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
-      5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17
+      5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17, 5.C1, 5.C2, 5.C3, 5.C4, 5.C5
     Opt-in      : 5.5a executes under `npm run verify:login-failure`
     Opt-in      : 5.5b executes under `npm run verify:login-failure`
 
     Per suite (hosted / local, executable live or conditional):
-      suite 5: 30 ids — hosted 28 executable, 0 STATIC, 2 NOT EXECUTED | local 0 executable, 30 absent
+      suite 5: 35 ids — hosted 28 executable, 5 STATIC, 2 NOT EXECUTED | local 0 executable, 35 absent
 
   READ "executable remotely" AS A MAXIMUM, NOT A PROMISE. It counts the conditional
   assertions as executable, and each of those has a precondition that can fail to hold:
@@ -610,6 +669,12 @@ the code can count appears in the prose of docs/VERIFICATION.md.
   hold the assertion is reported NOT EXECUTED with its reason and is never counted as a
   pass. The per-run figures the runner prints below its attacks are the actual result;
   this block is the inventory those results are drawn from.
+
+  A STATIC assertion appears under "Executes live on NEITHER path" because it asserts
+  SOURCE — the committed migration text, or the shape of a declared table — and source is
+  not a live execution against any target. It is there because that is what it is, not
+  because it was skipped, and it really did run. Do not read that bucket as a count of
+  assertions nothing exercises.
 ```
 
 <!-- DISPOSITION:END -->

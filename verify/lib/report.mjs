@@ -82,6 +82,23 @@ export class Report {
   }
 
   /**
+   * DELETED. LEFT AS A THROWING STUB ON PURPOSE.
+   *
+   * A missing method throws TypeError, which is an accident of JavaScript rather than a
+   * decision. This throws a message that names the correct status, so the fifth state cannot
+   * rot back in through a copy-paste from an older harness.
+   */
+  skip(id) {
+    throw new Error(
+      `Report.skip() is deleted and does not come back. Assertion ${id ?? '(unnamed)'} must ` +
+        `use notExecuted(id, description, reason) and report as NOT EXECUTED. SKIP was a fifth ` +
+        `label that read like a decision ("we chose not to") when it meant "it did not run", and ` +
+        `a status that softens a non-execution is exactly how a non-result gets quoted as a ` +
+        `result. There are four statuses: PASS, FAIL, STATIC, NOT EXECUTED.`,
+    )
+  }
+
+  /**
    * A source-file assertion. It really ran, but against the committed migration text — not
    * against the deployed database. `note` is printed with every occurrence so the
    * distinction cannot be lost between the assertion and the summary.

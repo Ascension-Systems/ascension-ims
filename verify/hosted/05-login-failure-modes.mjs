@@ -124,6 +124,11 @@ export async function compilePredicate() {
       ok: true,
       classifyAuthError: predicate.classifyAuthError,
       LOGIN_ERROR: predicate.LOGIN_ERROR,
+      // The REAL runtime sets, not a grep of the source text. 5.C asserts the 5.1 table against
+      // the same objects classifyAuthError branches on, which is the same property that makes
+      // 5.1 an execution of the product's code rather than a mirror of it.
+      SUPPRESSED_CODES: predicate.SUPPRESSED_CODES,
+      RATE_LIMIT_CODES: predicate.RATE_LIMIT_CODES,
       cases: cases.PREDICATE_CASES,
     }
   } catch (err) {
@@ -169,6 +174,164 @@ export function runPredicateTable(report, compiled) {
  * place to edit and one mechanism watching it.
  */
 const PREDICATE_IDS = MANIFEST.filter((e) => e.id.startsWith('5.1.')).map((e) => e.id)
+
+/* ==================================================================== *
+ * 5.C — invariants BETWEEN the 5.1 table and the predicate's own sets
+ * ==================================================================== */
+
+/**
+ * 5.1 asks "does the predicate decide this input correctly". 5.C asks the question 5.1 cannot:
+ * "is the table still asking about the right inputs".
+ *
+ * The failure these exist to catch is a SILENT one. Add a code to SUPPRESSED_CODES and forget
+ * the matching row, and every 5.1 row still passes — the table simply never mentions the new
+ * code, and the branch that shows a success page grows without a single assertion noticing.
+ * Delete a code from SUPPRESSED_CODES and the corresponding row starts failing, which is loud;
+ * ADDING one is the direction with no alarm on it. 5.C1/5.C2 close that direction. 5.C3/5.C5
+ * close the reverse — a row asserting SUPPRESSED for a code the product does not suppress
+ * would be a table that has stopped describing the product.
+ *
+ * These are STATIC, not live: they assert the SHAPE of a source table against the predicate's
+ * own runtime sets. Nothing is executed against a deployed target, so nothing here may ever be
+ * counted as a live pass. That is exactly what `report.staticCheck` encodes.
+ *
+ * They read the REAL exported Sets out of the compiled artefact rather than grepping
+ * `auth-error.ts` for strings — the same reason 5.1 executes the product's code instead of
+ * mirroring it. A grep would keep agreeing with a comment long after the code moved on.
+ */
+export const PREDICATE_INVARIANT_IDS = ['5.C1', '5.C2', '5.C3', '5.C4', '5.C5']
+
+export const PREDICATE_INVARIANT_DESCRIPTIONS = {
+  '5.C1': 'every SUPPRESSED_CODES member has a 5.1 row expecting SUPPRESSED',
+  '5.C2': 'every RATE_LIMIT_CODES member has a 5.1 row expecting RATE_LIMITED',
+  '5.C3': 'no 5.1 row expects SUPPRESSED for a code outside SUPPRESSED_CODES',
+  '5.C4': '5.1.13 and 5.1.16 survive, expect UNAVAILABLE, and 5.1.16 uses a code in neither set',
+  '5.C5': 'no 5.1 row expects RATE_LIMITED for a code outside RATE_LIMIT_CODES',
+}
+
+const INVARIANT_NOTE =
+  'STATIC — asserts the SHAPE of verify/login/predicate-cases.ts against the predicate\'s own ' +
+  'exported code sets. Real, but it asserts SOURCE, not deployed state, and is never a live pass.'
+
+export function runPredicateTableInvariants(report, compiled) {
+  const notExecutedAllInvariants = (reason) => {
+    for (const id of PREDICATE_INVARIANT_IDS) {
+      report.notExecuted(id, PREDICATE_INVARIANT_DESCRIPTIONS[id], reason)
+    }
+  }
+
+  if (!compiled.ok) {
+    // Same pattern as runPredicateTable: the ids still have to appear, or the disposition
+    // drifts. A compile failure is NOT EXECUTED — never PASS, never FAIL.
+    notExecutedAllInvariants(compiled.reason)
+    return
+  }
+
+  // A missing set would make 5.C1/5.C2 pass VACUOUSLY, which is the exact failure mode this
+  // whole suite exists to refuse. An absent set is an absence of evidence, so it is reported
+  // as one rather than as agreement.
+  const isSet = (v) => v instanceof Set || (v && typeof v.has === 'function' && typeof v[Symbol.iterator] === 'function')
+  if (!isSet(compiled.SUPPRESSED_CODES) || !isSet(compiled.RATE_LIMIT_CODES)) {
+    notExecutedAllInvariants(
+      'NOT EXECUTED — the compiled app/login/auth-error.ts did not export SUPPRESSED_CODES and ' +
+        'RATE_LIMIT_CODES as iterable sets, so the table could not be compared against the real ' +
+        'runtime sets. Asserting against nothing would pass vacuously; it is reported as not run.',
+    )
+    return
+  }
+  if (!Array.isArray(compiled.cases)) {
+    notExecutedAllInvariants(
+      'NOT EXECUTED — verify/login/predicate-cases.ts did not export PREDICATE_CASES as an array.',
+    )
+    return
+  }
+
+  const cases = compiled.cases
+  const suppressed = [...compiled.SUPPRESSED_CODES]
+  const rateLimited = [...compiled.RATE_LIMIT_CODES]
+  const codeOf = (c) => (typeof c?.input?.code === 'string' ? c.input.code : undefined)
+  const hasRow = (code, expected) =>
+    cases.some((c) => codeOf(c) === code && c.expected === expected)
+  const rowById = (id) => cases.find((c) => c.id === id)
+
+  const unrepresentedSuppressed = suppressed.filter((code) => !hasRow(code, 'SUPPRESSED'))
+  report.staticCheck(
+    '5.C1',
+    PREDICATE_INVARIANT_DESCRIPTIONS['5.C1'],
+    unrepresentedSuppressed.length === 0,
+    INVARIANT_NOTE,
+    `SUPPRESSED_CODES members with no 5.1 row carrying that input.code AND expected 'SUPPRESSED': ` +
+      `${JSON.stringify(unrepresentedSuppressed)}. A suppressed code with no row is a widening of ` +
+      `the branch that shows a success page, asserted by nothing.`,
+  )
+
+  const unrepresentedRateLimited = rateLimited.filter((code) => !hasRow(code, 'RATE_LIMITED'))
+  report.staticCheck(
+    '5.C2',
+    PREDICATE_INVARIANT_DESCRIPTIONS['5.C2'],
+    unrepresentedRateLimited.length === 0,
+    INVARIANT_NOTE,
+    `RATE_LIMIT_CODES members with no 5.1 row carrying that input.code AND expected ` +
+      `'RATE_LIMITED': ${JSON.stringify(unrepresentedRateLimited)}.`,
+  )
+
+  const strayS = cases
+    .filter((c) => c.expected === 'SUPPRESSED')
+    .filter((c) => {
+      const code = codeOf(c)
+      return code === undefined || !compiled.SUPPRESSED_CODES.has(code)
+    })
+    .map((c) => ({ id: c.id, code: codeOf(c) }))
+  report.staticCheck(
+    '5.C3',
+    PREDICATE_INVARIANT_DESCRIPTIONS['5.C3'],
+    strayS.length === 0,
+    INVARIANT_NOTE,
+    `rows expecting SUPPRESSED for a code the product does not suppress: ${JSON.stringify(strayS)}. ` +
+      `The table has stopped describing the product.`,
+  )
+
+  const gap = rowById('5.1.13')
+  const forward = rowById('5.1.16')
+  const forwardCode = forward ? codeOf(forward) : undefined
+  const c4 =
+    gap !== undefined &&
+    forward !== undefined &&
+    gap.expected === 'UNAVAILABLE' &&
+    forward.expected === 'UNAVAILABLE' &&
+    forwardCode !== undefined &&
+    !compiled.SUPPRESSED_CODES.has(forwardCode) &&
+    !compiled.RATE_LIMIT_CODES.has(forwardCode)
+  report.staticCheck(
+    '5.C4',
+    PREDICATE_INVARIANT_DESCRIPTIONS['5.C4'],
+    c4,
+    INVARIANT_NOTE,
+    `5.1.13 = ${JSON.stringify(gap ? { expected: gap.expected } : null)}, 5.1.16 = ` +
+      `${JSON.stringify(forward ? { expected: forward.expected, code: forwardCode } : null)}. ` +
+      `Together these two state the property the whole fix rests on: an error nobody has seen is ` +
+      `never reported to the user as a success. 5.1.16 only states it while its code is genuinely ` +
+      `unrecognised by BOTH sets — the moment that code is added to one, the row stops testing ` +
+      `forward-compatibility and starts testing the branch it was meant to bypass.`,
+  )
+
+  const strayR = cases
+    .filter((c) => c.expected === 'RATE_LIMITED')
+    .filter((c) => {
+      const code = codeOf(c)
+      // A row with NO code that expects RATE_LIMITED is legitimate — it exercises the
+      // status === 429 branch, which is decided without any code at all (5.1.9).
+      return code !== undefined && !compiled.RATE_LIMIT_CODES.has(code)
+    })
+    .map((c) => ({ id: c.id, code: codeOf(c) }))
+  report.staticCheck(
+    '5.C5',
+    PREDICATE_INVARIANT_DESCRIPTIONS['5.C5'],
+    strayR.length === 0,
+    INVARIANT_NOTE,
+    `rows expecting RATE_LIMITED for a code outside RATE_LIMIT_CODES: ${JSON.stringify(strayR)}.`,
+  )
+}
 
 /* ==================================================================== *
  * 5.2 — the real hosted error shape
@@ -438,16 +601,40 @@ const notExecutedAll = (report, ids, descriptions, reason) => {
   for (const id of ids) report.notExecuted(id, descriptions[id], reason)
 }
 
-export async function runEnumerationEquivalence(report, baseUrl, runId) {
+/**
+ * ------------------------------------------------------------------------------------
+ * 5.4 IS SPLIT IN THREE ON PURPOSE. THE SPLIT IS THE ASSERTION.
+ * ------------------------------------------------------------------------------------
+ * NOT EXECUTED and FAIL mean opposite things — "we have no evidence" versus "we have evidence
+ * and it differed" — and the Human's ruling on the UNAVAILABLE default in
+ * `app/login/auth-error.ts` rests on 5.4 being able to say the second one. So the two states
+ * are separated STRUCTURALLY rather than by care:
+ *
+ *   resolveEquivalenceInputs   every precondition, and the ONLY place NOT EXECUTED is reachable.
+ *                              It takes no `report`, so it cannot emit a PASS or a FAIL either.
+ *   assertEquivalence          the comparison. It is handed a verdict-only facade, so once both
+ *                              responses are in hand it cannot reach notExecuted() — the call
+ *                              throws. All four ids are emitted unconditionally, no early return.
+ *   runEnumerationEquivalence  the seam between them, and nothing else.
+ *
+ * Behaviour is identical to the single function this replaced: same ids, same statuses, same
+ * reasons, same exit codes on every input. What changed is that the harness can no longer
+ * silently degrade a real difference between the two responses into "did not run".
+ */
+
+/**
+ * Every precondition for 5.4, and nowhere else. Returns `{ ready: false, reason }` when the
+ * comparison genuinely cannot be attempted, or `{ ready: true, unregistered, registered }`.
+ * It is handed no `report`, which is what makes the "no verdict from here" property structural.
+ */
+export async function resolveEquivalenceInputs(baseUrl, runId) {
   if (!baseUrl) {
-    notExecutedAll(report, EQUIVALENCE_IDS, EQUIVALENCE_DESCRIPTIONS, NOT_EXECUTED_NO_BASE_URL)
-    return
+    return { ready: false, reason: NOT_EXECUTED_NO_BASE_URL }
   }
 
   const located = await locateLoginAction(baseUrl)
   if (!located.ok) {
-    notExecutedAll(report, EQUIVALENCE_IDS, EQUIVALENCE_DESCRIPTIONS, located.reason)
-    return
+    return { ready: false, reason: located.reason }
   }
 
   const unregistered = await submitLoginForm(
@@ -464,14 +651,12 @@ export async function runEnumerationEquivalence(report, baseUrl, runId) {
   )
 
   if (!unregistered.ok || !registered.ok) {
-    notExecutedAll(
-      report,
-      EQUIVALENCE_IDS,
-      EQUIVALENCE_DESCRIPTIONS,
-      `NOT EXECUTED — the form POST to ${baseUrl}/login failed: ` +
+    return {
+      ready: false,
+      reason:
+        `NOT EXECUTED — the form POST to ${baseUrl}/login failed: ` +
         `${unregistered.error ?? registered.error}`,
-    )
-    return
+    }
   }
 
   // 5.4b sends a real magic link to a non-routable address and consumes that address's
@@ -481,32 +666,57 @@ export async function runEnumerationEquivalence(report, baseUrl, runId) {
     isRateLimitRedirect(unregistered.location, baseUrl) ||
     isRateLimitRedirect(registered.location, baseUrl)
   ) {
-    notExecutedAll(
-      report,
-      EQUIVALENCE_IDS,
-      EQUIVALENCE_DESCRIPTIONS,
-      'NOT EXECUTED — the per-address email throttle fired; re-run after the throttle window',
-    )
-    return
+    return {
+      ready: false,
+      reason:
+        'NOT EXECUTED — the per-address email throttle fired; re-run after the throttle window',
+    }
   }
 
+  return { ready: true, unregistered, registered }
+}
+
+/**
+ * A Report view that can ONLY record a verdict. Handed to assertEquivalence so that once both
+ * responses are in hand the comparison physically cannot reach notExecuted(). The two states
+ * mean opposite things — "we have no evidence" versus "we have evidence and it differed" — and
+ * the Human's ruling on the UNAVAILABLE default rests on 5.4 being able to say the second one.
+ */
+function verdictOnly(report) {
+  return {
+    check: (id, description, condition, detail) => report.check(id, description, condition, detail),
+    notExecuted(id) {
+      throw new Error(
+        `5.4: the equivalence comparison reached notExecuted() for ${id}. Both responses were ` +
+          `already in hand, so the only honest outcomes are PASS and FAIL. Every NOT EXECUTED ` +
+          `path for 5.4 belongs in resolveEquivalenceInputs(), strictly before the comparison.`,
+      )
+    },
+  }
+}
+
+/**
+ * The comparison itself. `verdict` is the facade, NOT the Report — that is the guard. There is
+ * no early return: all four ids are emitted unconditionally, every time this is reached.
+ */
+export function assertEquivalence(verdict, unregistered, registered, baseUrl) {
   const u = locationParts(unregistered.location, baseUrl)
   const r = locationParts(registered.location, baseUrl)
 
-  report.check(
+  verdict.check(
     '5.4a',
     EQUIVALENCE_DESCRIPTIONS['5.4a'],
     u.path === '/login/check-email',
     `observed HTTP ${unregistered.status} -> ${unregistered.location}`,
   )
-  report.check(
+  verdict.check(
     '5.4b',
     EQUIVALENCE_DESCRIPTIONS['5.4b'],
     r.path === '/login/check-email',
     `observed HTTP ${registered.status} -> ${registered.location}`,
   )
   // THE assertion. Not "both look like success" but "the two responses are indistinguishable".
-  report.check(
+  verdict.check(
     '5.4c',
     EQUIVALENCE_DESCRIPTIONS['5.4c'],
     unregistered.location !== null &&
@@ -516,12 +726,22 @@ export async function runEnumerationEquivalence(report, baseUrl, runId) {
     `unregistered ${JSON.stringify(unregistered.location)} vs registered ` +
       `${JSON.stringify(registered.location)}`,
   )
-  report.check(
+  verdict.check(
     '5.4d',
     EQUIVALENCE_DESCRIPTIONS['5.4d'],
     unregistered.status === registered.status,
     `unregistered HTTP ${unregistered.status} vs registered HTTP ${registered.status}`,
   )
+}
+
+/** The seam. Preconditions, or comparison. Nothing else lives here. */
+export async function runEnumerationEquivalence(report, baseUrl, runId) {
+  const inputs = await resolveEquivalenceInputs(baseUrl, runId)
+  if (!inputs.ready) {
+    notExecutedAll(report, EQUIVALENCE_IDS, EQUIVALENCE_DESCRIPTIONS, inputs.reason)
+    return
+  }
+  assertEquivalence(verdictOnly(report), inputs.unregistered, inputs.registered, baseUrl)
 }
 
 /* ==================================================================== *
@@ -538,6 +758,10 @@ export const INVALID_KEY_DESCRIPTIONS = {
  * The 5.5 assertions, driven against an ALREADY-RUNNING instance that was booted with a
  * deliberately invalid anon key. `verify/login-failure.mjs` owns the booting; this owns the
  * assertions, so the default run and the opt-in run make the same claim from the same code.
+ *
+ * DELIBERATELY NOT GIVEN 5.4's verdictOnly GUARD, and that asymmetry is not an oversight: 5.5
+ * is opt-in rather than default-run, so its NOT EXECUTED is the normal outcome of `npm run
+ * verify` rather than a degradation to be structurally prevented.
  */
 export async function runInvalidKeyProbe(report, baseUrl, runId, readStderr) {
   const located = await locateLoginAction(baseUrl)
@@ -600,6 +824,7 @@ export default async function suite5(ctx) {
 
   const compiled = await compilePredicate()
   runPredicateTable(report, compiled)
+  runPredicateTableInvariants(report, compiled)
 
   await probeHostedErrorShape(report, cfg, compiled, runId)
   await runRenderChecks(report, cfg.portalBaseUrl)

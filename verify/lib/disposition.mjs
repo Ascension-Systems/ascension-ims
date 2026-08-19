@@ -5,10 +5,13 @@
  * WHY THIS IS CODE AND NOT A PARAGRAPH
  * ------------------------------------------------------------------------------------
  * The previous answers to "how many assertions are there, and which of them can actually
- * run" were produced by reading `docs/VERIFICATION.md` and counting. That cannot work: 35 of
- * the ids appear there in countable form and the rest do not appear at all, one call site
- * generates six assertions from a loop, and one table row is three assertions in the code. A
- * number that describes generated output must itself be generated.
+ * run" were produced by reading `docs/VERIFICATION.md` and counting. That cannot work: only a
+ * minority of the ids appear there in countable form and the rest do not appear at all, one
+ * call site generates a family of assertions from a loop, and one table row is several
+ * assertions in the code. A number that describes generated output must itself be generated.
+ * (This paragraph carried hand-typed figures of its own until they were removed: accurate,
+ * unmechanised, and one edit away from being false. The rule applies to the file that states
+ * the rule.)
  *
  * So: `verify/lib/manifest.mjs` declares the inventory, this file derives every figure from
  * it, both runners print the result, `checkDrift` reconciles the declaration against what the
@@ -21,7 +24,7 @@
  * document, the document is wrong.
  */
 
-import { MANIFEST, ATTACK_SUITES, REGRESSION_SUITES, NON_INVENTORY_IDS, NON_INVENTORY_PATTERN } from './manifest.mjs'
+import { MANIFEST, ATTACK_SUITES, REGRESSION_SUITES, NON_INVENTORY_IDS, NON_INVENTORY_PATTERN, STATES } from './manifest.mjs'
 
 const EXECUTABLE = new Set(['live', 'conditional'])
 const isExecutable = (state) => EXECUTABLE.has(state)
@@ -90,6 +93,72 @@ export function computeDisposition(manifest = MANIFEST) {
       'REGRESSION SUITE 5 — magic-link request failure modes',
     ),
   }
+}
+
+/* ==================================================================== *
+ * The invariants, ENFORCED. Printing a sum is not the same as asserting it.
+ * ==================================================================== */
+
+/** Structural integrity of the DECLARED SET, independent of any run. */
+export function checkManifestIntegrity(manifest = MANIFEST) {
+  const problems = []
+  const seen = new Map()
+  for (const [i, e] of manifest.entries()) {
+    if (typeof e.id !== 'string' || e.id.length === 0) {
+      problems.push(`entry ${i}: id is missing or not a string`)
+      continue
+    }
+    if (seen.has(e.id)) problems.push(`duplicate id ${e.id} (entries ${seen.get(e.id)} and ${i})`)
+    else seen.set(e.id, i)
+    for (const path of ['hosted', 'local']) {
+      if (!STATES.includes(e[path])) {
+        problems.push(`${e.id}: ${path} state ${JSON.stringify(e[path])} is not one of ${STATES.join(', ')}`)
+      }
+    }
+  }
+  return { ok: problems.length === 0, problems }
+}
+
+/** The sum invariant renderScope prints. Printing is not asserting; this asserts. */
+export function checkDispositionSums(totals, manifest = MANIFEST) {
+  const problems = []
+  for (const s of [totals.attacks, totals.regression]) {
+    const sum = s.both.length + s.localOnly.length + s.remoteOnly.length + s.neither.length
+    if (sum !== s.total) {
+      problems.push(`${s.label}: buckets sum to ${sum}, declared total is ${s.total}`)
+    }
+    const bySuite = s.bySuite.reduce((n, b) => n + b.total, 0)
+    if (bySuite !== s.total) {
+      problems.push(`${s.label}: per-suite totals sum to ${bySuite}, declared total is ${s.total}`)
+    }
+  }
+  const scoped = totals.attacks.total + totals.regression.total
+  if (scoped !== manifest.length) {
+    problems.push(
+      `the two scopes cover ${scoped} entries but the manifest declares ${manifest.length} — ` +
+        `an entry whose suite is in neither ATTACK_SUITES nor REGRESSION_SUITES is silently ` +
+        `absent from every total`,
+    )
+  }
+  return { ok: problems.length === 0, problems }
+}
+
+/**
+ * The failure banner for both checks above, and for checkSubsetDrift. Same visual register as
+ * renderDrift on purpose: a broken invariant should look exactly as loud as manifest drift,
+ * because it is the same class of finding — the printed figures no longer describe the harness.
+ */
+export function renderInvariantFailure(label, problems) {
+  const lines = ['', '  ' + '!'.repeat(74), `  ${label}`]
+  lines.push('')
+  for (const p of problems) lines.push(`    ${p}`)
+  lines.push('')
+  lines.push('  Every figure this harness prints is derived from verify/lib/manifest.mjs. While')
+  lines.push('  the above holds, those figures are not a description of anything. Fix the')
+  lines.push('  manifest — do not adjust the check to agree with it.')
+  lines.push('  ' + '!'.repeat(74))
+  lines.push('')
+  return lines.join('\n')
 }
 
 /* ==================================================================== *
@@ -180,6 +249,12 @@ export function renderDispositionBlock(totals) {
     '  hold the assertion is reported NOT EXECUTED with its reason and is never counted as a',
     '  pass. The per-run figures the runner prints below its attacks are the actual result;',
     '  this block is the inventory those results are drawn from.',
+    '',
+    '  A STATIC assertion appears under "Executes live on NEITHER path" because it asserts',
+    '  SOURCE — the committed migration text, or the shape of a declared table — and source is',
+    '  not a live execution against any target. It is there because that is what it is, not',
+    '  because it was skipped, and it really did run. Do not read that bucket as a count of',
+    '  assertions nothing exercises.',
   ].join('\n')
 }
 
@@ -306,4 +381,46 @@ export function renderDrift(drift) {
   lines.push('  ' + '!'.repeat(74))
   lines.push('')
   return lines.join('\n')
+}
+
+/**
+ * Reconciles a partial runner against the subset of the manifest it declares responsibility
+ * for. checkDrift is for a runner that owns a whole path; this is for one that owns a slice.
+ *
+ * checkDrift CANNOT be used here. It filters `missing` by the set of suite numbers the run
+ * covers (`suitesRun`), and both partial runners build a Report numbered 5, so checkDrift
+ * would demand every suite-5 id and report a large, entirely false `missing` list. The subset
+ * is named by `predicate` instead — the same declaration in the manifest (`alsoRuns`,
+ * `optIn`) that says the smaller runner owns those ids in the first place.
+ *
+ * Set equality in BOTH directions, for the same reason checkDrift is bidirectional: an id the
+ * runner emits but does not declare is as much a drift as one it declares but never emits.
+ */
+export function checkSubsetDrift(manifest, report, predicate, label) {
+  const declared = manifest.filter(predicate).map((e) => e.id)
+  const declaredSet = new Set(declared)
+
+  const emitted = new Set()
+  for (const r of report.results) {
+    // Error-path ids are not assertions in the inventory. Same exclusion as checkDrift.
+    if (NON_INVENTORY_PATTERN.test(r.id) || NON_INVENTORY_IDS.includes(r.id)) continue
+    emitted.add(r.id)
+  }
+
+  const undeclared = [...emitted].filter((id) => !declaredSet.has(id)).sort()
+  const missing = declared.filter((id) => !emitted.has(id))
+
+  return { ok: undeclared.length === 0 && missing.length === 0, label, undeclared, missing }
+}
+
+/** The failure text for checkSubsetDrift, folded into renderInvariantFailure's banner. */
+export function subsetDriftProblems(subset) {
+  const problems = []
+  for (const id of subset.undeclared) {
+    problems.push(`${id} was emitted by this run but is not declared for ${subset.label}`)
+  }
+  for (const id of subset.missing) {
+    problems.push(`${id} is declared for ${subset.label} but was not emitted by this run`)
+  }
+  return problems
 }

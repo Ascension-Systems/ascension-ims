@@ -59,6 +59,15 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { Report, STATUS } from './lib/report.mjs'
+import { MANIFEST } from './lib/manifest.mjs'
+import {
+  computeDisposition,
+  checkManifestIntegrity,
+  checkDispositionSums,
+  checkSubsetDrift,
+  subsetDriftProblems,
+  renderInvariantFailure,
+} from './lib/disposition.mjs'
 import { REPO, loadDotEnvLocal } from './hosted/lib/config.mjs'
 import {
   DELIBERATELY_INVALID_KEY,
@@ -244,9 +253,41 @@ async function main() {
         '\n',
     )
   }
+
+  /* ------------------------------------------------------------------ *
+   * The manifest invariants, and this runner's reconciliation against
+   * the slice of the manifest it owns (the opt-in ids). No config, no
+   * network, no database — so it runs on every invocation.
+   *
+   * checkDrift is deliberately NOT used here — see checkSubsetDrift.
+   * ------------------------------------------------------------------ */
+  const integrity = checkManifestIntegrity(MANIFEST)
+  if (!integrity.ok) {
+    write(renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems))
+  }
+  const sums = checkDispositionSums(computeDisposition(MANIFEST), MANIFEST)
+  if (!sums.ok) {
+    write(renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems))
+  }
+  const subset = checkSubsetDrift(
+    MANIFEST,
+    report,
+    (e) => e.optIn === 'verify:login-failure',
+    '`npm run verify:login-failure`',
+  )
+  if (!subset.ok) {
+    write(
+      renderInvariantFailure(
+        'SUBSET DRIFT — this runner and the manifest disagree about which ids it owns.',
+        subsetDriftProblems(subset),
+      ),
+    )
+  }
+
   write('\n')
 
-  process.exitCode = report.failed === 0 && notRun.length === 0 ? 0 : 1
+  process.exitCode =
+    report.failed === 0 && notRun.length === 0 && integrity.ok && sums.ok && subset.ok ? 0 : 1
 }
 
 main().catch((err) => {

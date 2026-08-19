@@ -3,7 +3,12 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import { classifyAuthError, LOGIN_ERROR, type AuthFailureClass } from './auth-error'
+import {
+  classifyAuthError,
+  LOGIN_ERROR,
+  UNCLASSIFIED_REASON,
+  type AuthFailureClass,
+} from './auth-error'
 
 /**
  * Magic-link request. No password fields, no reset flow, no credential storage.
@@ -58,7 +63,7 @@ export async function requestMagicLink(formData: FormData) {
 
   // Fail-safe default. If nothing below runs, we fail honestly rather than claiming success.
   let outcome: Outcome = 'UNAVAILABLE'
-  let reason = 'unavailable:unclassified'
+  let reason: string = UNCLASSIFIED_REASON
 
   try {
     // createClient() THROWS when a required env var is missing (lib/env.ts). It belongs
@@ -87,6 +92,16 @@ export async function requestMagicLink(formData: FormData) {
       reason = classified.reason
       // Logged server-side only. "User not found" must never reach the client.
       console.error('[login] signInWithOtp failed:', reason, error.message)
+      if (classified.reason === UNCLASSIFIED_REASON) {
+        // A distinct, greppable marker. This is the branch the Human's ruling on the UNAVAILABLE
+        // default makes load-bearing, so it must be findable without reading every login line.
+        console.error(
+          'UNCLASSIFIED_AUTH_ERROR [login] signInWithOtp: the auth error matched no known status or ' +
+            'code branch and was classified UNAVAILABLE by default. ' +
+            `status=${JSON.stringify(error.status)} code=${JSON.stringify(error.code)} ` +
+            `name=${JSON.stringify(error.name)}`,
+        )
+      }
     }
   } catch (thrown) {
     outcome = 'UNAVAILABLE'

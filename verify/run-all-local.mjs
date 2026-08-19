@@ -23,7 +23,15 @@
 import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, migrationFiles } from './lib/harness.mjs'
 import { STATUS } from './lib/report.mjs'
 import { MANIFEST } from './lib/manifest.mjs'
-import { checkDrift, renderDrift, computeDisposition, renderDispositionBlock } from './lib/disposition.mjs'
+import {
+  checkDrift,
+  renderDrift,
+  computeDisposition,
+  renderDispositionBlock,
+  checkManifestIntegrity,
+  checkDispositionSums,
+  renderInvariantFailure,
+} from './lib/disposition.mjs'
 import attack1 from './01-rls-bypass.mjs'
 import attack2 from './02-concurrent-last-unit.mjs'
 import attack3 from './03-stale-baseline.mjs'
@@ -135,11 +143,30 @@ async function main() {
   process.stdout.write(renderDrift(drift))
 
   /* ---------------------------------------------------------------- *
+   * The manifest's own integrity and the sum invariant. Neither needs
+   * config, network or a database. renderScope PRINTS the sum; these
+   * two ASSERT it, which is not the same thing.
+   * ---------------------------------------------------------------- */
+  const totals = computeDisposition(MANIFEST)
+  const integrity = checkManifestIntegrity(MANIFEST)
+  if (!integrity.ok) {
+    process.stdout.write(
+      renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems),
+    )
+  }
+  const sums = checkDispositionSums(totals, MANIFEST)
+  if (!sums.ok) {
+    process.stdout.write(
+      renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems),
+    )
+  }
+
+  /* ---------------------------------------------------------------- *
    * The one authoritative disposition, computed — never hand-counted.
    * ---------------------------------------------------------------- */
-  process.stdout.write(renderDispositionBlock(computeDisposition(MANIFEST)) + '\n')
+  process.stdout.write(renderDispositionBlock(totals) + '\n')
 
-  process.exitCode = failed.length === 0 && drift.ok ? 0 : 1
+  process.exitCode = failed.length === 0 && drift.ok && integrity.ok && sums.ok ? 0 : 1
 }
 
 main().catch(async (err) => {
