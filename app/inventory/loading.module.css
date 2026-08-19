@@ -1,3 +1,7 @@
+/* Border colour on .bar/.chips/.card below is --gray-500 (5.3:1 against paper), not
+   --gray-300 (1.7:1): it matches the real card border once data loads, and stays visible
+   at arm's length in poor light instead of near-vanishing. */
+
 .main {
   display: flex;
   flex-direction: column;
@@ -7,12 +11,12 @@
 
 .bar {
   height: var(--tap-search);
-  border: var(--border-width) solid var(--gray-300);
+  border: var(--border-width) solid var(--gray-500);
 }
 
 .chips {
   height: var(--tap-chip);
-  border: var(--border-width) solid var(--gray-300);
+  border: var(--border-width) solid var(--gray-500);
 }
 
 .list {
@@ -25,7 +29,7 @@
   position: relative;
   min-height: 88px;
   padding: var(--space-4);
-  border: var(--border-width) solid var(--gray-300);
+  border: var(--border-width) solid var(--gray-500);
 }
 
 .name {

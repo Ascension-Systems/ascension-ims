@@ -27,6 +27,14 @@
   color: var(--gray-700);
   white-space: nowrap;
   flex: 0 0 auto;
+  /* Pinned to the left edge of the scrolling row, opaque background so it stays legible as
+     chips scroll underneath. Without this a reader who scrolls right to find "Workstations"
+     or "Stale" loses the "Category" / "Status" / "Sort" caption that told them what the row
+     was for -- a real cost for someone unsure the row even *is* three separate groups. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--paper);
 }
 
 .chip {
