@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit",
     "seed:generate": "node scripts/generate-seed.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
+    "verify:preflight": "node verify/preflight.mjs",
+    "verify:identities": "node scripts/setup-test-identities.mjs",
+    "verify:identities:remove": "node scripts/remove-test-identities.mjs",
     "verify": "node verify/run-all.mjs",
+    "verify:local": "node verify/run-all-local.mjs",
     "check:secrets": "bash scripts/check-no-secrets.sh"
   },
   "dependencies": {

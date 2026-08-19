@@ -12,6 +12,7 @@
 #   * a service-role key exposed to the browser via a NEXT_PUBLIC_ prefix
 #   * a committed .env / .env.local
 #   * .env.example carrying anything other than bare NAME= lines
+#   * any environment VALUE reaching stdout from verify/ or scripts/
 #
 set -uo pipefail
 
@@ -85,6 +86,23 @@ if [ -f .env.example ]; then
   else
     echo "ok  : .env.example carries only bare NAME= lines"
   fi
+fi
+
+# --- No environment value may reach stdout. ---------------------------------------------
+#
+# Enforces the booleans-only configuration proof mechanically rather than by review. The
+# hosted harness prints `set` / `unset` and the project ref, and nothing else: a length is a
+# fingerprint and a hash is a fingerprint. This fires on any line that both writes to stdout
+# and reads process.env, which is the only way a value can get out.
+#
+# It does NOT false-positive on console.log('missing NEXT_PUBLIC_SUPABASE_URL') -- that line
+# contains no `process.env.`.
+hits="$(grep -rInE '(console\.(log|error|warn|info)|process\.stdout\.write)[^\n]*process\.env\.' \
+  verify scripts 2>/dev/null || true)"
+if [ -n "$hits" ]; then
+  report "no env value is ever printed" "$hits"
+else
+  echo "ok  : no env value is ever printed"
 fi
 
 # --- Seed and verification email addresses must be non-routable. ------------------------

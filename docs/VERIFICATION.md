@@ -3,101 +3,84 @@
 Companion to `PLAN.md`. How the four required attacks (brief lines 184–205) are executed
 against a **real database**, and what each asserts.
 
-**Ferb has no live database credentials and must not be given any.** Everything here runs
-against a **local** Postgres that Builder's code stands up from the committed migrations.
-Nothing in this document connects to the hosted Supabase project (`rakslwwxduovcqnuercz`).
+**REVISED 2026-08-19 — the verification tooling now targets the hosted project.** The
+statement this document previously opened with ("Ferb has no live database credentials and
+must not be given any") was true when written and stopped being true when the Human supplied
+a hosted Supabase project. `npm run verify` runs the four attacks against
+`rakslwwxduovcqnuercz` over HTTPS, using real GoTrue-issued sessions. The embedded-Postgres
+path survives as `npm run verify:local`, demoted and relabelled — §1 and §7 below.
 
 **Assertions are made against a real database, never against mocks.** A mocked RLS policy
 proves nothing; that is the whole point of these four.
 
+**Never print PASS for anything not actually executed.** Every assertion ends as `PASS`,
+`FAIL`, `STATIC` (a labelled migration-source check) or `NOT EXECUTED` with a printed reason.
+There is no fifth state and no fallback between them. Totals are computed from what actually
+ran; no expected count is hard-coded anywhere.
+
 ---
 
-## 1. Two ways to get a local database
+## 1. How the harness reaches a database
 
-`verify/README.md` documents both. `verify/run-all.mjs` detects which is available and prints
-which one it used, because the answer changes what the results mean.
+### The hosted path — `npm run verify` (the default, and the one that matters)
 
-### Path A (preferred) — Supabase CLI + Docker
+HTTPS only. There is no `SUPABASE_DB_URL` and no `DATABASE_URL`: a Supabase direct or pooler
+connection string embeds the database password, and the credential rule forbids accepting a
+password. No `pg` client exists anywhere on this path.
+
+| Channel | Used for |
+|---|---|
+| PostgREST `/rest/v1/…` | table reads, filtered writes, refusal SQLSTATEs |
+| PostgREST `/rest/v1/rpc/…` | `record_commitment`, `apply_inventory_sync` |
+| GoTrue `/auth/v1/…` | admin user creation, magic links, OTP exchange, real signed JWTs |
+| the running app over HTTP | `POST /api/commitments`, `POST /api/sync`, only when `PORTAL_BASE_URL` is set |
+
+Three consequences drive the assertion classification in §3–§6:
+
+1. **Each request is its own transaction.** No `BEGIN`, no lock held across statements, no
+   `SET LOCAL ROLE`. Anything needing a transaction to stay open is unreachable.
+2. **`pg_catalog` is not exposed.** `pg_class`, `pg_locks`, `pg_stat_activity`,
+   `pg_get_functiondef`, `pg_blocking_pids` are unreachable.
+3. **There is no rollback — every request commits.** Which is why every hosted write is
+   confined to the harness-owned `KYV-` / `location = 'kyv-verify'` namespace, and
+   `app_settings` is only ever written back to its own current value. No `SEA-*` row is
+   mutated and the demo delta is read-only. `verify/README.md` documents the fixtures and the
+   exact teardown order.
+
+**Identity is real.** `admin.createUser` → service-role profile upsert →
+`admin.generateLink({ type: 'magiclink' })` → `properties.hashed_token` → `verifyOtp` on a
+separate anon client → a session carrying a real GoTrue-signed JWT. No email is sent and no
+password is ever set. That is the thing embedded Postgres cannot supply and the entire point
+of this pass.
+
+**No silent fallback.** Missing configuration or an unreachable endpoint prints
+`NOT EXECUTED — no Supabase configuration` per affected attack and exits non-zero. A missing
+schema is a *different* verdict, `NOT EXECUTED — schema not applied`, because the two send the
+reader to different places. `verify/preflight.mjs` is read-only, creates nothing, and
+distinguishes both from `seed not applied`, `demo delta not applied, run order violated` and
+`test identities not provisioned`.
+
+### The local path — `npm run verify:local` (demoted, kept, relabelled)
+
+Reachable only by asking for it by name. `npm run verify` never selects it and never falls
+back to it.
 
 ```
-supabase start
-supabase db reset      # applies supabase/migrations/*.sql in order, then supabase/seed/*.sql
+npm run verify:local                                               # ephemeral embedded Postgres
+VERIFY_DATABASE_URL=postgresql://…@127.0.0.1:5432/postgres npm run verify:local
 ```
 
-Gives the real thing: the `auth` schema, real `auth.users`, real `auth.uid()`, real
-`anon`/`authenticated`/`service_role` roles, and GoTrue. RLS behaves exactly as it will in
-production.
+Without the Supabase stack there is no `auth` schema, no `auth.users`, no `auth.uid()` and
+none of the three roles, so every migration would fail on the first foreign key to
+`auth.users(id)`. `verify/shim/00_auth_shim.sql` supplies the minimum and is applied **before**
+the migrations. It is **not** a migration and must never be pasted into the hosted SQL editor
+— `supabase/migrations/` contains only files a Human will paste.
 
-**Credential rule for Path A:** the local stack's keys are printed by `supabase status`. The
-harness must read them at runtime via `supabase status -o json` and **must never hardcode
-them, not even the well-known local-development defaults.** A hardcoded key-shaped string in
-the repo fails `scripts/check-no-secrets.sh` and violates the no-secrets rule regardless of
-whether it happens to be public. `verify/lib/harness.mjs` owns this lookup.
+**The Supabase-CLI / docker branch has been deleted.** There is no supabase CLI in this
+environment, and a detection branch that can never fire is how a future reader concludes the
+option exists.
 
-### Path B (fallback) — plain `psql` against a local Postgres
-
-**This is the most likely place the whole verification effort falls over, so it is planned
-explicitly rather than left to Builder to discover.**
-
-Without the Supabase stack there is no `auth` schema, no `auth.users`, no `auth.uid()`, and
-none of the three database roles. Every migration would fail on the first foreign key to
-`auth.users(id)`.
-
-`verify/shim/00_auth_shim.sql` supplies the minimum, and is applied **before** the migrations:
-
-```sql
--- LOCAL VERIFICATION ONLY. This file lives in verify/shim/ and NOT in supabase/migrations/.
--- It must never be pasted into the hosted SQL editor -- Supabase already provides all of it.
-
-CREATE SCHEMA IF NOT EXISTS auth;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')          THEN CREATE ROLE anon          NOLOGIN NOINHERIT; END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN NOINHERIT; END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role')  THEN CREATE ROLE service_role  NOLOGIN NOINHERIT BYPASSRLS; END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS auth.users (
-  id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text UNIQUE NOT NULL
-);
-
--- Mirrors Supabase's real implementation: read the claim the request set, not a session var
--- the application chose. Same signature, same STABLE volatility, same NULL-when-absent
--- behaviour.
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
-LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')::uuid;
-$$;
-
-CREATE OR REPLACE FUNCTION auth.role() RETURNS text
-LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '');
-$$;
-
-CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
-LANGUAGE sql STABLE AS $$
-  SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
-$$;
-
-GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
-GRANT SELECT ON auth.users TO service_role;
-```
-
-**Constraints this imposes on the migrations, which Builder must respect:**
-
-- Migrations may reference `auth.users`, `auth.uid()`, `auth.jwt()`, `auth.role()` and the
-  three roles — and **nothing else** from the Supabase-managed surface. No `auth.email()`,
-  no `storage.*`, no `supabase_functions.*`, no `pgjwt`, no `pg_net`.
-- The shim is not a migration and never becomes one. `supabase/migrations/` must contain only
-  files the Human will paste into the hosted SQL editor.
-- `handle_new_user()`'s trigger on `auth.users` works under Path B because the shim creates
-  the table locally. Under Path A it works because Supabase permits it. If it fails on the
-  hosted project when the Human applies `0002`, `ensure_profile()` is the documented fallback
-  (`SCHEMA.md` §2) — that is why it exists.
-
-**How a session "signs in" under Path B.** Exactly how Supabase's own local RLS testing
-works:
+**How a session "signs in" on this path:**
 
 ```sql
 BEGIN;
@@ -108,21 +91,56 @@ ROLLBACK;   -- or COMMIT where the test needs the write to persist
 ```
 
 `SET LOCAL ROLE` is what makes RLS apply; without it the harness runs as the table owner and
-every policy is bypassed, which would produce a set of false passes. `verify/lib/harness.mjs`
-exposes `asRep(client)` / `asAdmin(client)` / `asAnon(client)` so no test writes those two
-lines by hand and forgets one.
+every policy is bypassed, which would produce a set of false passes.
 
-**Honest limitation, stated rather than papered over:** under Path B the harness asserts its
-own identity by setting the claims GUC directly. That means Path B proves the **policies** are
-correct given an identity; it does **not** prove that JWT signing, verification or session
-handling are correct — those are GoTrue's job and are exercised only under Path A and by
-manual sign-in against the deployed app. `verify/run-all.mjs` prints this caveat in its
-output whenever it runs under Path B, so a Path B pass is never mistaken for a stronger claim
-than it is.
+**Scope statement, printed verbatim in the banner and again in the summary:**
+
+```
+  SCOPE: POLICY LOGIC ONLY.
+  This run exercises RLS policy logic, function guards and concurrency control against an
+  ephemeral local PostgreSQL server. It sets request.jwt.claims directly.
+  It does NOT cover: identity issuance, JWT signing, JWT verification, PostgREST request
+  handling, or session handling. Those are GoTrue's and PostgREST's job and are exercised
+  only by `npm run verify` against the configured hosted project.
+  A pass here must never be reported as a claim about the hosted project.
+```
+
+**The loopback guard.** `bootstrap()` in `verify/lib/harness.mjs` opens with
+`DROP SCHEMA IF EXISTS public CASCADE`. It refuses to issue a single statement unless the
+connection URL resolves to a loopback host (127.0.0.0/8, `localhost`, `::1`), and it throws
+before the first query rather than warning after it. Nothing under `verify/hosted/**` imports
+that module, and the module graph of `verify/run-all.mjs` contains neither it, nor `pg`, nor
+`embedded-postgres`.
 
 ---
 
-## 2. `verify/00-setup.sql` — deterministic fixtures
+## 2. Fixtures and identities
+
+### The hosted path
+
+Two identities, minted through GoTrue with real signed JWTs, no email, no password:
+`rep.verify@example.invalid` and `admin.verify@example.invalid`. `example.invalid` is a
+reserved, non-routable TLD — those addresses cannot receive mail and cannot be mistaken for a
+person's. `npm run verify:identities` creates them; `npm run verify:identities:remove` removes
+them and everything else the harness wrote.
+
+Fixture data lives entirely in the `KYV-` / `location = 'kyv-verify'` namespace
+(`KYV-0001`…`KYV-0007`; the SKU shape is forced by `products_sku_format`, which constrains
+every sku to `^[A-Z]{3}-[0-9]{4}$`). `verify/README.md` carries the table of what each one is
+for, what a run writes, and the FK-ordered teardown.
+
+**`npm run verify:identities` refuses to run if the demo delta is not yet applied.** That is
+not a convenience check: `supabase/seed/0003_seed_demo_delta.sql` binds to the earliest `rep`
+profile by `created_at`, and no-ops entirely if **any** commitment row exists anywhere — its
+guard is `IF EXISTS (SELECT 1 FROM public.commitments)`, unscoped by sku or location. So the
+first commitment this harness writes, even at `location = 'kyv-verify'` on a `KYV-` sku, would
+suppress `0003` permanently. The canonical order is: **provision and sign in the real rep →
+paste `supabase/seed/0003_seed_demo_delta.sql` → only then create test identities and run the
+harness.** The detector is a positive probe for the demo-delta row itself, not a bare
+commitment count — a count alone waves through the worse state where unrelated commitments
+exist but `0003` never ran.
+
+### The local path — `verify/00-setup.sql`
 
 Fixed UUIDs so every assertion can name a row, and so a re-run is reproducible.
 
@@ -133,7 +151,7 @@ INSERT INTO auth.users (id, email) VALUES
   ('00000000-0000-4000-8000-000000000002', 'admin.verify@example.invalid')
 ON CONFLICT (id) DO NOTHING;
 
--- Under Path A the trigger has already made these; under Path B it has too (shim table).
+-- The shim's auth.users table lets the profile trigger fire; this is belt and braces.
 -- Promote the second one.
 UPDATE public.profiles SET role = 'admin'
  WHERE id = '00000000-0000-4000-8000-000000000002';
@@ -147,7 +165,16 @@ The last-unit test SKU is `SEA-9006`, pinned by the seed generator with
 
 ---
 
-## 3. Attack 1 — RLS bypass (`verify/01-rls-bypass.mjs`)
+## 3. Attack 1 — RLS bypass
+
+`verify/hosted/01-rls-bypass.mjs` (hosted) and `verify/01-rls-bypass.mjs` (local).
+
+> **Hosted:** 16 of the 17 assertions run live over PostgREST against real GoTrue sessions.
+> `1.12` is a labelled **STATIC** check of `supabase/migrations/0008_inventory_view.sql`,
+> because `pg_class` is not exposed; no live proxy for it exists over this channel and none is
+> invented. Every write targets `KYV-0001`/`KYV-0002`/`KYV-0003` at `location = 'kyv-verify'`
+> — the `SEA-*` SKUs named in the table below are the local path's fixtures and are read-only
+> to the hosted harness.
 
 **Method.** Connect as `rep` (identity 1) and query directly over SQL, not through the UI.
 An admin-session control run confirms the rows actually exist, so that a refusal is
@@ -177,7 +204,22 @@ for the write cases.
 
 ---
 
-## 4. Attack 2 — concurrent commitment on the last unit (`verify/02-concurrent-last-unit.mjs`)
+## 4. Attack 2 — concurrent commitment on the last unit
+
+`verify/hosted/02-concurrent-last-unit.mjs` (hosted) and `verify/02-concurrent-last-unit.mjs`
+(local).
+
+> **Hosted:** the swarm (4b below) runs live as 20 unawaited HTTPS requests to the
+> `record_commitment` RPC on `KYV-0004` and `KYV-0005`, with a new assertion `2b.0` that
+> records send and first-response timestamps and asserts the requests genuinely overlapped,
+> and a new `2b.2b` that asserts every refusal's message. The deterministic interleaving (4a)
+> is `NOT EXECUTED` against hosted — PostgREST has one transaction per request and no
+> `pg_locks` — and runs only under `verify:local`.
+>
+> **The residual gap, which must never be glossed:** the hosted swarm proves the **outcome**
+> is correctly serialised. It does not provide direct evidence of **blocking**. The honest
+> line, which the runner prints: *serialisation outcome verified against hosted; blocking
+> behaviour verified only under verify:local*.
 
 Two genuinely concurrent connections via `pg`, on `SEA-9006` (availability exactly 1).
 
@@ -222,7 +264,22 @@ A third variant sets `qty_on_hand = 3` and fires 20 callers: exactly 3 succeed, 
 
 ---
 
-## 5. Attack 3 — delta survives a stale baseline (`verify/03-stale-baseline.mjs`)
+## 5. Attack 3 — delta survives a stale baseline
+
+`verify/hosted/03-stale-baseline.mjs` (hosted) and `verify/03-stale-baseline.mjs` (local).
+
+> **Hosted:** the fixture is `KYV-0006` at `location = 'kyv-verify'`, same 40/10/30 shape.
+> Steps 3.4/3.5 (ageing) are `NOT EXECUTED` — they need `ALTER TABLE … DISABLE TRIGGER`, which
+> is DDL and unreachable. Step 3.6 is a **STATIC** grep of the migration source, since
+> `pg_get_functiondef` is not exposed. Steps 3.4a and 3.7 attack the immutability guard with a
+> service-role `PATCH`; if that returns `42501` rather than `KY006` the harness reports a
+> **missing grant**, not a broken trigger, because those are different findings.
+>
+> **`commitments_still_pending` is project-wide, not payload-scoped**
+> (`0010_fn_apply_inventory_sync.sql:148` counts every pending commitment, unfiltered), so on
+> hosted the `3.2c` assertion is a **delta** against a count read immediately beforehand, not
+> the absolute `= 1` the local path can rely on. `commitments_confirmed`, `rows_applied` and
+> `overrides_preserved` count only the call's own work and stay absolute.
 
 This is the oversell bug the project exists to prevent.
 
@@ -248,7 +305,25 @@ looks right fails: if the baseline update and the state change were in separate 
 
 ---
 
-## 6. Attack 4 — role enforcement is server-side (`verify/04-role-enforcement.mjs`)
+## 6. Attack 4 — role enforcement is server-side
+
+`verify/hosted/04-role-enforcement.mjs` (hosted) and `verify/04-role-enforcement.mjs` (local).
+
+> **Hosted:** all 17 assertions run live, two of them (4.9, 4.10) conditional on
+> `PORTAL_BASE_URL` being set and on the app accepting the harness-minted session. Writes
+> target `KYV-0001` and `KYV-0002`, never `SEA-9007`.
+>
+> **4.12b** reads `inventory_authority` and writes **that same value** back, asserting 1 row
+> affected. `app_settings` is a singleton with no disposable copy, and over PostgREST the
+> original `SET inventory_authority = 'portal'` would commit and flip the live portal's
+> authority mode. The affected-row count is 1 either way, so the policy is proven exactly as
+> strongly; the `WHERE` clause stays identical to 4.4's, which is the evidential point.
+>
+> **4.10** is stated in the table below as "401". `middleware.ts` matches `/api/*` and
+> redirects an unauthenticated request to `/login` **before** the route handler runs, so the
+> route's own 401 is never reached. That redirect is the refusal. The hosted assertion accepts
+> either form, prints which it observed, and corroborates it by asserting that no
+> `inventory_sync_runs` row appeared.
 
 Each admin-only action is invoked **directly** as a `rep`, at the layer where the check is
 claimed to live. Hiding a button is not access control and is not tested here.
@@ -289,45 +364,87 @@ through 4.8 bypass the route handlers entirely to prove it.
 
 ---
 
-## 7. `verify/run-all.mjs` — output contract
+## 7. Output contract
 
-Runs `00-setup.sql` then attacks 1–4 in order, against a freshly reset local database.
-Prints, per attack:
+`npm run verify` prints, in order: a banner naming the channel; a **booleans-only**
+configuration block; a read-only preflight; then each attack; then a summary.
+
+The configuration block is `set` / `unset` and the project ref, and nothing else. **Never a
+fragment, prefix, suffix, length, character count, hash, checksum or masked form of any
+value** — a length is a fingerprint and so is a hash. `scripts/check-no-secrets.sh` enforces
+this mechanically: it fails on any line in `verify/` or `scripts/` that both writes to stdout
+and reads `process.env`.
+
+```
+CONFIGURATION
+  NEXT_PUBLIC_SUPABASE_URL .......... set
+  NEXT_PUBLIC_SUPABASE_ANON_KEY ..... set
+  SUPABASE_SERVICE_ROLE_KEY ......... set
+  PORTAL_BASE_URL ................... unset
+  project ref ....................... rakslwwxduovcqnuercz
+```
+
+Per attack:
 
 ```
 ATTACK 2 — Concurrent commitment on the last unit
-  Path:   A (supabase start / docker)
-  Method: two concurrent pg connections; A holds the FOR UPDATE row lock inside an open
-          transaction while B calls record_commitment on the same SKU; B asserted blocked
-          for >500ms, then A commits and B is observed to fail. Repeated as a 20-way
-          Promise.all swarm on a 1-unit and a 3-unit SKU.
-  2a.1 B blocked while A open ........................ PASS
-  ...
-  RESULT: PASS (9/9 assertions)
+  Target:  hosted Supabase project rakslwwxduovcqnuercz (PostgREST + GoTrue over HTTPS)
+  Method: 20 unawaited HTTPS requests to the record_commitment RPC …
+  2a.0 KYV-0004 starts with availability of exactly 1 ........ PASS
+  2a.2 B is still blocked 500ms later while A holds the lock ... NOT EXECUTED
+       ↳ PostgREST has no open transactions — …  Runs under `npm run verify:local`.
+  2b.1 20-way swarm on 1 unit: exactly 1 succeeds ............ PASS
+  1.12 v_inventory carries security_invoker .................. STATIC
+       ↳ STATIC — asserts the migration source, not the deployed view. …
+  RESULT: PASS (14/14 executed, 9 NOT EXECUTED)
+  NOTE:   Serialisation outcome verified against hosted; blocking behaviour verified only
+          under verify:local.
 ```
 
-Exit code 0 only if all four attacks pass. Any failure prints the failing assertion, the
-observed SQLSTATE and the expected one.
+The summary then lists **every** `NOT EXECUTED` assertion with its reason and **every**
+`STATIC` assertion with the note that it asserts migration source rather than deployed state.
 
-The summary block restates the Path A/B caveat from §1 verbatim, so the result is never
-reported as stronger than the method supports.
+**No assertion count appears anywhere in this document, and none is hard-coded in the
+harness.** Totals are computed from what actually ran. A figure from a previous run against a
+different target is not a result.
 
-`scripts/check-no-secrets.sh` runs separately and is **not** one of the four attacks: it
-greps the repo for key-shaped strings (`eyJ`-prefixed JWTs, `sb[a-z]*_`-prefixed keys,
-`password`, `secret`, `token` assignments) and fails on any hit outside `.env.example`
-variable names.
+Exit code is 0 only if nothing failed. A `NOT EXECUTED` is never counted as a pass. Missing
+configuration, an unreachable endpoint, an unapplied schema, an unapplied seed, a violated run
+order or absent test identities each abort the run with their own verdict string and a
+non-zero exit.
+
+`scripts/check-no-secrets.sh` runs separately and is **not** one of the four attacks: it greps
+the repo for key-shaped strings (`eyJ`-prefixed JWTs, `sb[a-z]*_`-prefixed keys, credential
+assignments), for a service-role key exposed via a `NEXT_PUBLIC_` prefix, for committed dotenv
+files, and for any environment value reaching stdout.
 
 ---
 
 ## 8. What cannot be verified in this environment
 
-Stated plainly rather than papered over:
+Stated plainly rather than papered over. Note that one bullet has **inverted** since the
+previous revision.
 
-- **Magic-link email delivery.** Requires a real mail send from the hosted project. Only the
-  Human can confirm a link arrives and signs in. Not attackable here.
-- **The hosted project's actual RLS state.** The migrations are written, not applied. The
-  harness proves the *migrations* produce correct policies; it cannot prove the hosted
-  database has them until the Human pastes them. The hand-off must say so.
+- **Magic-link email delivery.** Still unverifiable, and now for a sharper reason: the harness
+  bypasses email *by design* — `generateLink` plus `verifyOtp` is what makes unattended
+  verification possible at all — so it proves nothing about whether a link actually reaches an
+  inbox. Only a Human signing in can confirm that.
+- **The hosted project's actual RLS state — NO LONGER ON THIS LIST.** It was unverifiable when
+  the harness could only reach a local database. It becomes verifiable the moment the Human
+  applies migrations 0001–0012 and runs `npm run verify`, which is what this tooling now
+  exists to do. Until they are applied, the preflight reports
+  `NOT EXECUTED — schema not applied` rather than claiming anything.
+- **Raw-SQL, open-transaction and `pg_catalog` assertions against hosted.** PostgREST gives one
+  transaction per request and no catalog access, so `2a.1`–`2a.9`, `2b.10`, and the ageing
+  assertions `3.4`, `3.4b`, `3.5`, `3.5b`, `3.5c` (which need `ALTER TABLE … DISABLE TRIGGER`)
+  are reported `NOT EXECUTED` with the reason. They all run under `npm run verify:local`.
+- **Deployed function and view bodies.** `pg_get_functiondef` and `pg_class` are not exposed
+  over PostgREST, so `1.12` and the `3.6` family are `STATIC` checks of the migration source.
+  `verify:local` inspects a deployed object — but a locally deployed one.
+- **Blocking, as distinct from serialisation.** The hosted swarm proves exactly one caller
+  wins; it cannot show a caller *waiting*. Preserved under `verify:local` and printed as a
+  caveat, never glossed.
+- **JWT signing and verification under `verify:local`.** That path sets the claims GUC
+  directly. It is now covered against hosted, which is the point of this revision.
 - **Netlify deployment and the public URL.** Deploy is a push, and pushing is a Human action.
-- **JWT signing/verification** under Path B only — see §1.
 - **Real Web Push.** Out of scope by the brief; nothing to verify.

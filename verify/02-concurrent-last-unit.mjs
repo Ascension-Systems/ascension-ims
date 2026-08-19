@@ -220,32 +220,16 @@ export default async function attack2(db) {
     /* ================================================================ *
      * 2a.10 — the same losing call through the HTTP surface
      * ================================================================ */
-    if (process.env.PORTAL_BASE_URL) {
-      const res = await fetch(`${process.env.PORTAL_BASE_URL}/api/commitments`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(process.env.PORTAL_REP_COOKIE ? { cookie: process.env.PORTAL_REP_COOKIE } : {}),
-        },
-        body: JSON.stringify({ sku: 'SEA-9006', qty: 1 }),
-      })
-      const body = await res.json().catch(() => ({}))
-      report.check(
-        '2a.10',
-        'POST /api/commitments returns 409 INSUFFICIENT_AVAILABILITY',
-        res.status === 409 && body.error === 'INSUFFICIENT_AVAILABILITY',
-        `observed HTTP ${res.status} ${JSON.stringify(body)}`,
-      )
-    } else {
-      report.skip(
-        '2a.10',
-        'POST /api/commitments returns 409 INSUFFICIENT_AVAILABILITY',
-        'requires a running app server AND a live Supabase/PostgREST endpoint to reach it. ' +
-          'Set PORTAL_BASE_URL (and PORTAL_REP_COOKIE for a rep session) to run it. ' +
-          'NOT RUN in this environment — the database-level refusal above is executed for real; ' +
-          'the HTTP mapping in lib/errors.ts is not exercised here.',
-      )
-    }
+    report.skip(
+      '2a.10',
+      'POST /api/commitments returns 409 INSUFFICIENT_AVAILABILITY',
+      'NOT RUN ON THIS PATH, BY DESIGN. This runner exercises policy logic only — it does ' +
+        'not cover PostgREST request handling or session handling, so it has no session a ' +
+        'running app would accept and cannot mint one. The database-level refusal above is ' +
+        'executed for real; the HTTP mapping in lib/errors.ts is exercised by ' +
+        '`npm run verify` with PORTAL_BASE_URL set, where the harness mints a real session ' +
+        'itself. No operator-supplied cookie is accepted anywhere.',
+    )
 
     /* ================================================================ *
      * 2b — stochastic swarm, 1 unit

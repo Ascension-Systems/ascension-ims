@@ -160,37 +160,16 @@ export default async function attack4(db) {
     /* ---------------------------------------------------------------- *
      * 4.9 / 4.10 — the HTTP surface
      * ---------------------------------------------------------------- */
-    if (process.env.PORTAL_BASE_URL) {
-      const withSession = await fetch(`${process.env.PORTAL_BASE_URL}/api/sync`, {
-        method: 'POST',
-        headers: process.env.PORTAL_REP_COOKIE ? { cookie: process.env.PORTAL_REP_COOKIE } : {},
-      })
-      const body9 = await withSession.json().catch(() => ({}))
-      report.check(
-        '4.9',
-        'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE',
-        withSession.status === 403 && body9.error === 'FORBIDDEN_ROLE',
-        `observed HTTP ${withSession.status} ${JSON.stringify(body9)}`,
-      )
-
-      const noSession = await fetch(`${process.env.PORTAL_BASE_URL}/api/sync`, { method: 'POST' })
-      const body10 = await noSession.json().catch(() => ({}))
-      report.check(
-        '4.10',
-        'POST /api/sync with no session returns 401',
-        noSession.status === 401,
-        `observed HTTP ${noSession.status} ${JSON.stringify(body10)}`,
-      )
-    } else {
-      const reason =
-        'requires a running app server AND a live Supabase endpoint for it to talk to. ' +
-        'Set PORTAL_BASE_URL (and PORTAL_REP_COOKIE) to run these. NOT RUN in this environment. ' +
-        'The database-level refusal underneath both (4.6) IS executed for real, and the plan ' +
-        'states the database layer is the authoritative one — the route guards exist to return ' +
-        'a clean 403/401 instead of a 500.'
-      report.skip('4.9', 'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE', reason)
-      report.skip('4.10', 'POST /api/sync with no session returns 401', reason)
-    }
+    const reason =
+      'NOT RUN ON THIS PATH, BY DESIGN. This runner exercises policy logic only — it does ' +
+      'not cover PostgREST request handling or session handling, so it has no session a ' +
+      'running app would accept and cannot mint one. The database-level refusal underneath ' +
+      'both (4.6) IS executed for real here, and the plan states the database layer is the ' +
+      'authoritative one — the route guards exist to return a clean 403/401 instead of a ' +
+      '500. Both are exercised by `npm run verify` with PORTAL_BASE_URL set, where the ' +
+      'harness mints a real session itself. No operator-supplied cookie is accepted anywhere.'
+    report.skip('4.9', 'POST /api/sync with a rep session returns 403 FORBIDDEN_ROLE', reason)
+    report.skip('4.10', 'POST /api/sync with no session is refused', reason)
 
     /* ---------------------------------------------------------------- *
      * 4.11 — as anon. EXECUTE is revoked, so the guard's NULL-uid branch
