@@ -38,6 +38,15 @@ REVOKE EXECUTE ON FUNCTION public.pending_commitment_totals()                  F
 REVOKE EXECUTE ON FUNCTION public.app_role()                                   FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.is_admin()                                   FROM PUBLIC, anon;
 
+-- Trigger functions. Postgres refuses a direct call ("trigger functions can only be called as
+-- triggers"), so this is hygiene rather than a live hole -- but a complete revoke list is the
+-- thing a pen test checks, and "all functions except the two nobody thought of" is not one.
+-- Line 15's REVOKE ALL ON ALL FUNCTIONS covers anon and not PUBLIC, so PUBLIC retained EXECUTE
+-- on both of these until this pass.
+REVOKE EXECUTE ON FUNCTION public.handle_new_user()                 FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.enforce_commitment_invariants()   FROM PUBLIC, anon;
+-- No matching GRANT: trigger functions execute as the trigger owner and need none.
+
 GRANT EXECUTE ON FUNCTION public.record_commitment(text, integer, text, text)
   TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.apply_inventory_sync(jsonb)
@@ -49,11 +58,30 @@ GRANT EXECUTE ON FUNCTION public.pending_commitment_totals()
 GRANT EXECUTE ON FUNCTION public.app_role()  TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_admin()  TO authenticated, service_role;
 
--- Anything created later defaults to nothing for the client roles.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES    FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon;
+-- Anything created LATER by this role defaults to nothing for the client roles. Scoped with
+-- an explicit FOR ROLE so the statement is not silently a no-op: ALTER DEFAULT PRIVILEGES
+-- without FOR ROLE applies only to objects created by the CURRENT role, which on a hosted
+-- Supabase project is `postgres`. Objects created by any other role are NOT covered by this
+-- and must be granted explicitly, as everything above is.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES    FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC, anon;
 
--- Note the pairing that makes apply_inventory_sync safe: it permits a NULL auth.uid() (so
--- service_role can run an unattended sync), and that branch is only sound because EXECUTE is
--- revoked from anon, whose auth.uid() is also NULL. If a future change grants anon execute
--- on that function, the role guard opens. Both halves must stay.
+-- The SEQUENCES line was missing entirely. FUNCTIONS is revoked from PUBLIC as well as anon,
+-- because functions default to PUBLIC, not to anon -- revoking only from anon left the default
+-- wide open for every future function.
+
+-- THE PAIRING, CORRECTED 2026-08-19. This note used to say apply_inventory_sync permits a NULL
+-- auth.uid() and that "that branch is only sound because EXECUTE is revoked from anon". That is
+-- now FALSE, and a false comment is worse than none.
+--
+-- 0010's role guard is fail-closed ON ITS OWN: it denies by default and admits only
+-- COALESCE(public.is_admin(), false) or COALESCE(auth.role(), '') = 'service_role'. A NULL-uid
+-- anonymous caller is refused with KY003 by the function itself, with or without this revoke.
+--
+-- THE REVOKE BELOW STAYS. It is now defence in depth rather than the only thing standing there,
+-- and a future change that granted anon EXECUTE would no longer open the guard -- but it must
+-- still not be made: two independent refusals is the correct posture, and the revoke is what
+-- keeps anon from reaching the function at all rather than merely being refused inside it.
+-- BOTH HALVES STAY. Assertion 4.13 proves the guard independently of the grant by deliberately
+-- granting anon EXECUTE on a disposable local database and asserting KY003 anyway.

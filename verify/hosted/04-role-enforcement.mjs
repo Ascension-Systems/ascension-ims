@@ -26,7 +26,10 @@
  * value differs, and it differs in the safe direction.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Report } from '../lib/report.mjs'
+import { REPO } from './lib/config.mjs'
 import {
   selectRows,
   insertRows,
@@ -348,6 +351,33 @@ export default async function attack4(ctx) {
     'admin apply_inventory_sync succeeds',
     c3.ok,
     `code=${c3.code} ${c3.message ?? ''}`,
+  )
+
+  /* ---------------------------------------------------------------- *
+   * 4.13 — the role guard is fail-closed WITHIN 0010, independently of
+   *        the 0012 grant. STATIC on this path, and deliberately so.
+   * ---------------------------------------------------------------- */
+  const syncSql = readFileSync(
+    join(REPO, 'supabase', 'migrations', '0010_fn_apply_inventory_sync.sql'),
+    'utf8',
+  )
+  const hasAdminTerm = syncSql.includes('COALESCE(public.is_admin(), false)')
+  const hasServiceRoleTerm = syncSql.includes("COALESCE(auth.role(), '') = 'service_role'")
+  const hasOldFailOpenForm = syncSql.includes('auth.uid() IS NOT NULL AND NOT')
+  report.staticCheck(
+    '4.13',
+    'the role guard in 0010 is fail-closed within its own file (deny by default; admin or service_role only)',
+    hasAdminTerm && hasServiceRoleTerm && !hasOldFailOpenForm,
+    'STATIC — asserts the MIGRATION SOURCE of supabase/migrations/0010_fn_apply_inventory_sync.sql, ' +
+      'not deployed state. The live form of this assertion GRANTs anon EXECUTE and asserts KY003 ' +
+      'anyway; that is a real privilege change on a live project and is refused here, so it runs ' +
+      'only under `npm run verify:local`, against an ephemeral database that is dropped and ' +
+      'recreated on every run.',
+    `COALESCE(public.is_admin(), false) present: ${hasAdminTerm}; ` +
+      `COALESCE(auth.role(), '') = 'service_role' present: ${hasServiceRoleTerm}; ` +
+      `old fail-open form "auth.uid() IS NOT NULL AND NOT" still present: ${hasOldFailOpenForm}. ` +
+      `The old form permitted every NULL-uid caller and was safe only because 0012 revokes ` +
+      `EXECUTE from anon — a two-file property with a window between the two pastes.`,
   )
 
   return report

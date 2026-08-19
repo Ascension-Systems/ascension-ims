@@ -53,10 +53,26 @@ DECLARE
   v_inv       public.inventory%ROWTYPE;
   v_c         public.commitments%ROWTYPE;
 BEGIN
-  -- ROLE GUARD. A NULL auth.uid() means service_role or a server-side job, which is
-  -- allowed. That branch is only safe because EXECUTE is REVOKEd from anon (0012) --
-  -- an anonymous caller also has a NULL uid and must never reach this function.
-  IF auth.uid() IS NOT NULL AND NOT public.is_admin() THEN
+  -- ROLE GUARD — FAIL CLOSED, WITHIN THIS FILE.
+  --
+  -- Deny by default. Exactly two callers are permitted:
+  --   * an admin  (public.is_admin(), which reads profiles.role via the signed JWT's sub)
+  --   * service_role, for the unattended sync (auth.role() reads the JWT's role claim)
+  --
+  -- Both COALESCEs are load-bearing. auth.role() is NULL when there is no request.jwt.claims
+  -- GUC, and in plpgsql `IF NULL THEN` does not fire — an un-COALESCEd expression would be
+  -- fail-OPEN, which is the exact defect this amendment removes.
+  --
+  -- The previous form was `IF auth.uid() IS NOT NULL AND NOT public.is_admin()`, which
+  -- permitted every NULL-uid caller and was safe only because 0012 revokes EXECUTE from anon.
+  -- That is a TWO-FILE property, and during hand-paced manual migration application there is a
+  -- window between pasting 0010 and pasting 0012 in which the database sits fail-open. The
+  -- 0012 revoke STAYS — it is still correct and is now defence in depth rather than the only
+  -- thing standing here.
+  IF NOT (
+       COALESCE(public.is_admin(), false)
+       OR COALESCE(auth.role(), '') = 'service_role'
+     ) THEN
     RAISE EXCEPTION 'admin role required' USING ERRCODE = 'KY003';
   END IF;
 

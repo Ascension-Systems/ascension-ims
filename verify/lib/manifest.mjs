@@ -152,6 +152,11 @@ export const MANIFEST = [
   { id: '4.12a',     suite: 4, hosted: 'live',          local: 'live' },
   { id: '4.12b',     suite: 4, hosted: 'conditional',   local: 'live' },
   { id: '4.12c',     suite: 4, hosted: 'live',          local: 'live' },
+  // 4.13 — the 0010 role guard proves itself independently of the 0012 grant. LIVE locally
+  // (anon is deliberately granted EXECUTE on a disposable database and still gets KY003);
+  // STATIC on hosted, because granting anon EXECUTE on a live project to prove a guard is a
+  // real privilege change and is refused.
+  { id: '4.13',      suite: 4, hosted: 'static',        local: 'live' },
 
   { id: '5.1.1',     suite: 5, hosted: 'live',          local: 'absent', alsoRuns: 'verify:login-predicate' },
   { id: '5.1.2',     suite: 5, hosted: 'live',          local: 'absent', alsoRuns: 'verify:login-predicate' },

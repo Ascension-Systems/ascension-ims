@@ -364,11 +364,27 @@ claimed to live. Hiding a button is not access control and is not tested here.
 | 4.9 | `POST /api/sync` over HTTP with a rep session | Route handler guard + the function guard beneath it | **403**, body `{"error":"FORBIDDEN_ROLE"}` |
 | 4.10 | `POST /api/sync` with **no** session | `middleware.ts`, before the route handler | **307** redirect to `/login` (middleware refusal), and no new `inventory_sync_runs` row |
 | 4.10b | `POST /api/sync` with **no** session, reaching the route handler's own 401 | Route handler guard (`app/api/sync/route.ts`) | **NOT EXECUTED — unreachable: middleware refuses first** |
-| 4.11 | Same as 4.6 but as `anon` | `EXECUTE` revoked from `anon` (`0012`) | `42501` — the guard's NULL-uid branch is never reached |
+| 4.11 | Same as 4.6 but as `anon` | `EXECUTE` revoked from `anon` (`0012`) | `42501` — the grant refuses before the function is entered |
 | 4.12 | Control: 4.1, 4.4 and 4.6 as `admin` | — | All **succeed**. Proves the tests are testing the role and not a blanket denial. |
+| 4.13 | Same as 4.11, but with `EXECUTE` **deliberately granted** to `anon` first | The role guard **inside** `0010`, on its own | **`KY003`**. Local only (`live`); `STATIC` source check on the hosted path |
 
 4.12 is not optional. Without it, a build that refuses everything for everyone would pass 4.1
 through 4.11 and be reported as secure.
+
+**4.13 exists because 4.11 proves the wrong half.** 4.11 proves the `EXECUTE` revoke in `0012`
+refuses `anon` — it never reaches the function, so it says nothing about the guard inside it. The
+guard used to be `IF auth.uid() IS NOT NULL AND NOT public.is_admin()`, which permitted every
+NULL-uid caller and was safe *only* because of that revoke: a **two-file** property, with a real
+window during hand-paced manual migration application between pasting `0010` and pasting `0012`
+in which the database sits fail-open. The guard is now deny-by-default within `0010` itself, and
+4.13 proves it by granting `anon` `EXECUTE` on purpose and requiring `KY003` anyway. The `REVOKE`
+runs in a `finally`, and the target is an ephemeral database that `bootstrap()` drops and
+recreates on every run — `bootstrap()` refuses any host that is not loopback.
+
+On the hosted path 4.13 is `STATIC`: it greps `supabase/migrations/0010_fn_apply_inventory_sync.sql`
+for both `COALESCE` terms and for the absence of the old fail-open form. Granting `anon` `EXECUTE`
+on a live project to prove a guard is a real privilege change and is refused. That is a limit of
+the hosted path, printed as one, and never counted as a live pass.
 
 **Where the check lives, per admin-only action** — this is the answer to D7 #4:
 
@@ -629,18 +645,18 @@ the code can count appears in the prose of docs/VERIFICATION.md.
 
   THE FOUR REQUIRED ATTACKS (suites 1-4)
 
-    Total distinct assertion ids .................................. 97
+    Total distinct assertion ids .................................. 98
     Executable remotely  (npm run verify) ......................... 73
       of which conditional on a precondition ...................... 6
-    STATIC — asserts the migration source, not deployed ........... 8
+    STATIC — asserts the migration source, not deployed ........... 9
     NOT EXECUTED on the hosted path ............................... 16
 
-    Executes live ONLY under npm run verify:local ................. 23
+    Executes live ONLY under npm run verify:local ................. 24
     Executes live ONLY under npm run verify ....................... 5
     Executes live on BOTH paths ................................... 68
     Executes live on NEITHER path ................................. 1
 
-    68 + 23 + 5 + 1 = 97 (declared total 97)
+    68 + 24 + 5 + 1 = 98 (declared total 98)
 
     Remote-only :
       2a.10, 2b.0, 2b.2b, 4.9, 4.10
@@ -651,7 +667,7 @@ the code can count appears in the prose of docs/VERIFICATION.md.
       suite 1: 17 ids — hosted 16 executable, 1 STATIC, 0 NOT EXECUTED | local 17 executable
       suite 2: 23 ids — hosted 13 executable, 0 STATIC, 10 NOT EXECUTED | local 20 executable, 2 absent
       suite 3: 39 ids — hosted 27 executable, 7 STATIC, 5 NOT EXECUTED | local 39 executable
-      suite 4: 18 ids — hosted 17 executable, 0 STATIC, 1 NOT EXECUTED | local 15 executable, 1 absent
+      suite 4: 19 ids — hosted 17 executable, 1 STATIC, 1 NOT EXECUTED | local 16 executable, 1 absent
 
   REGRESSION SUITE 5 — magic-link request failure modes
 

@@ -201,6 +201,14 @@ order. Do not skip, do not reorder, do not batch.
 | 11 | `supabase/migrations/0011_rls_policies.sql` | all 15 policies across 6 tables |
 | 12 | `supabase/migrations/0012_grants.sql` | revokes, grants, function EXECUTE grants |
 
+> **`supabase/migrations/0010_fn_apply_inventory_sync.sql` was amended in place on 2026-08-19**
+> (role guard hardened to fail closed within its own file). Nothing in this repository has ever
+> been applied to the hosted project, so the file was amended rather than patched by a later
+> migration. **If you are holding an earlier copy of 0010, discard it and re-copy from this
+> repository.** The numbering and filenames are unchanged. `0012_grants.sql` was amended on the
+> same date (two missing `PUBLIC` revokes, a missing `SEQUENCES` default-privilege line, and an
+> explicit `FOR ROLE postgres` scope) — re-copy that one too.
+
 If `CREATE TRIGGER on_auth_user_created` in migration 2 is refused — some projects do not
 permit a trigger on `auth.users` — that is survivable. `ensure_profile()` is the documented
 fallback and the auth callback calls it on every successful sign-in. Note that you hit this,

@@ -185,6 +185,41 @@ export default async function attack4(db) {
     )
 
     /* ---------------------------------------------------------------- *
+     * 4.13 — THE GUARD PROVES ITSELF, INDEPENDENTLY OF THE GRANT.
+     *
+     * 4.11 proves the EXECUTE revoke refuses anon. Nothing proved the guard
+     * INSIDE 0010 would refuse anon if that revoke were ever missing — and
+     * during hand-paced manual migration application there is a real window
+     * between pasting 0010 and pasting 0012 in which exactly that is true.
+     *
+     * So: deliberately GRANT anon EXECUTE, call as anon, and require KY003
+     * from the function's own guard rather than 42501 from the grant. The
+     * REVOKE is in a `finally` so it runs even if the assertion throws.
+     * This is safe here and only here: the target is an ephemeral local
+     * database that bootstrap() drops and recreates on every run, and
+     * bootstrap() refuses to run against anything but a loopback host.
+     * ---------------------------------------------------------------- */
+    try {
+      await client.query(
+        'GRANT EXECUTE ON FUNCTION public.apply_inventory_sync(jsonb) TO anon',
+      )
+      const r413 = await anonAttempt(
+        client,
+        `SELECT public.apply_inventory_sync('{"rows":[]}'::jsonb)`,
+      )
+      report.refused(
+        '4.13',
+        'with EXECUTE deliberately granted, the role guard still refuses anon with KY003 (fail-closed within 0010 itself)',
+        r413,
+        'KY003',
+      )
+    } finally {
+      await client.query(
+        'REVOKE EXECUTE ON FUNCTION public.apply_inventory_sync(jsonb) FROM anon',
+      )
+    }
+
+    /* ---------------------------------------------------------------- *
      * 4.12 — CONTROL. The same actions as admin must SUCCEED.
      * ---------------------------------------------------------------- */
     const c1 = await adminAttempt(
