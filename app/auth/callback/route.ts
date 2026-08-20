@@ -28,12 +28,40 @@ import { siteUrl } from '@/lib/env'
  * Open-redirect guard. A `next` parameter is honoured only if it starts with a single `/`.
  * An open redirect on an auth callback is a phishing primitive; do not remove this.
  *
- * It is now belt-and-braces — `new URL(next, site)` cannot escape `site` once `next` is known
- * to start with a single `/` — but deleting a working guard on a hardening pass is a
- * regression, not a simplification.
+ * ------------------------------------------------------------------------------------
+ * THE PREFIX CHECK ALONE IS NOT SUFFICIENT. IT WAS BYPASSED. READ BEFORE EDITING.
+ * ------------------------------------------------------------------------------------
+ * This guard used to be described as "belt-and-braces", on the reasoning that
+ * `new URL(next, site)` cannot escape `site` once `next` starts with a single `/`.
+ * THAT REASONING IS FALSE, and the bypass was live:
+ *
+ *   /auth/callback?next=/%09/evil.com   ->   302 Location: https://evil.com/
+ *
+ * The WHATWG URL parser REMOVES ASCII tab (U+0009), LF (U+000A) and CR (U+000D) from its
+ * input BEFORE parsing. `URLSearchParams.get('next')` decodes `%09` to a real tab, so the
+ * string handed to the prefix checks is "/\t/evil.com" — which starts with exactly one `/`
+ * and passes every check above — and the string the URL parser then sees is "//evil.com",
+ * a protocol-relative URL that resolves to a foreign origin. `%0A`, `%0D` and `%0D%0A`
+ * behave identically, as does `/%09\evil.com` via the parser's backslash handling.
+ *
+ * Two independent controls now stand in front of that, and NEITHER may be removed:
+ *
+ *   1. Reject C0 controls and DEL outright, below. These are the characters whose presence
+ *      makes the string the parser sees differ from the string these checks inspect. Space
+ *      (U+0020) is deliberately NOT rejected: it is percent-encoded into the path by the
+ *      parser and cannot change the origin.
+ *   2. An ORIGIN EQUALITY CHECK on the resolved destination, at the redirect call site in
+ *      GET below. That check is the authoritative one — it holds even if some future parser
+ *      change invents a new way to escape that (1) does not anticipate.
  */
+// eslint-disable-next-line no-control-regex
+const FORBIDDEN_IN_NEXT = /[\u0000-\u001f\u007f]/
+
 function safeNext(next: string | null): string {
   if (!next) return '/inventory'
+  // Must run BEFORE the prefix checks: these characters are what let the parser and the
+  // prefix checks disagree about what the string is.
+  if (FORBIDDEN_IN_NEXT.test(next)) return '/inventory'
   if (!next.startsWith('/')) return '/inventory'
   if (next.startsWith('//') || next.startsWith('/\\')) return '/inventory'
   return next
@@ -118,6 +146,21 @@ export async function GET(request: NextRequest) {
     console.error('[auth/callback] ensure_profile failed:', profileError.message)
   }
 
+  // CONTROL 2 of the open-redirect guard (control 1 is safeNext above). This is the
+  // authoritative check: whatever `next` turned out to mean after parsing, the destination
+  // must be on THIS origin or it is not used. `siteUrl()` returns a normalised origin, so
+  // this is a like-for-like string comparison. Falling back to the default landing page
+  // rather than the error page is deliberate — the user IS authenticated at this point and
+  // the only thing wrong with their request is a destination we refuse to honour.
   const destination = new URL(next, site)
+  if (destination.origin !== site) {
+    console.error(
+      '[auth/callback] refused off-origin next destination:',
+      JSON.stringify(next),
+      '->',
+      JSON.stringify(destination.origin),
+    )
+    return NextResponse.redirect(new URL('/inventory', site))
+  }
   return NextResponse.redirect(destination)
 }
