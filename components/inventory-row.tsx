@@ -5,9 +5,11 @@ import { StatusBadge } from '@/components/status-badge'
 import { StaleBadge } from '@/components/stale-badge'
 import { RelativeTime } from '@/components/relative-time'
 import { ChevronGlyph } from '@/components/icons'
+import { CommitForm } from '@/components/commit-form'
+import { AdminOverrideForm } from '@/components/admin-override-form'
 import { rowStatus, sourceLabel } from '@/lib/status'
 import { formatDateOnly, formatEta, formatRelativeAge } from '@/lib/relative-time'
-import type { InventoryAuthority, InventoryViewRow } from '@/lib/types'
+import type { AppRole, InventoryAuthority, InventoryViewRow } from '@/lib/types'
 import styles from './inventory-row.module.css'
 
 /**
@@ -26,6 +28,7 @@ export function InventoryRow({
   expanded,
   onToggle,
   overrideAuthor,
+  viewerRole,
 }: {
   row: InventoryViewRow
   authority: InventoryAuthority
@@ -35,6 +38,9 @@ export function InventoryRow({
   onToggle: () => void
   /** Resolved email of the override author, or null when the viewer may not read it. */
   overrideAuthor?: string | null
+  /** Drives which step-2/step-3 controls appear. The DATABASE is the real gate -- these
+      controls being hidden is a convenience, never the access control. */
+  viewerRole: AppRole
 }) {
   const encoding = rowStatus(row)
   const eta = row.qty_incoming > 0 ? formatEta(row.incoming_eta) : null
@@ -144,6 +150,30 @@ export function InventoryRow({
               ) : null}
             </p>
           </div>
+        ) : null}
+
+        {/* Step 2 — recording a commitment. Available to every provisioned account: the
+            database permits any authenticated identity with a profiles row (record_commitment
+            takes no rep_id and reads auth.uid()), and an admin selling stock is a real case.
+            Rendered only inside the expanded panel so the list stays scannable. */}
+        <CommitForm
+          sku={row.sku}
+          location={row.location}
+          available={row.qty_available}
+          uom={row.uom}
+        />
+
+        {/* Step 3 — admin correction. HIDING THIS IS NOT THE ACCESS CONTROL: RLS policy
+            inventory_update_admin refuses a rep's UPDATE at the database, and attack 4 proves
+            it by making the identical request as a rep and observing 0 rows plus an unchanged
+            row. This check only keeps a control a rep cannot use off their screen. */}
+        {viewerRole === 'admin' ? (
+          <AdminOverrideForm
+            sku={row.sku}
+            location={row.location}
+            qtyOnHand={row.qty_on_hand}
+            qtyIncoming={row.qty_incoming}
+          />
         ) : null}
       </div>
     </li>

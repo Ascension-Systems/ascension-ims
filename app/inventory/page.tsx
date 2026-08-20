@@ -1,8 +1,9 @@
-import { requireUser } from '@/lib/auth'
+import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { getSettings } from '@/lib/settings'
 import { categoriesOf, getInventory } from '@/lib/inventory'
 import { InventoryList } from '@/components/inventory-list'
+import Link from 'next/link'
 import { SignOutButton } from '@/components/sign-out-button'
 import styles from './page.module.css'
 
@@ -22,7 +23,15 @@ export const dynamic = 'force-dynamic'
 export default async function InventoryPage() {
   await requireUser()
 
-  const [settings, { rows, error }] = await Promise.all([getSettings(), getInventory()])
+  const [profile, settings, { rows, error }] = await Promise.all([
+    getProfile(),
+    getSettings(),
+    getInventory(),
+  ])
+  // Falls back to 'rep' -- the LEAST privileged role -- if the profile cannot be read, so a
+  // failure here hides admin controls rather than revealing them. The database refuses the
+  // action regardless; this only decides what is on screen.
+  const viewerRole = profile?.role ?? 'rep'
 
   // The server's clock, passed down so the first paint computes staleness server-side and
   // the stale badge is correct before hydration.
@@ -55,7 +64,17 @@ export default async function InventoryPage() {
               : 'Availability including rep commitments not yet in QuickBooks.'}
           </p>
         </div>
-        <SignOutButton />
+        <div className={styles.headerActions}>
+          {/* Admins get the reconciliation queue -- their paperwork backlog. A rep who
+              navigates there directly is redirected back; RLS would in any case show them
+              only their own rows. */}
+          {viewerRole === 'admin' ? (
+            <Link className={styles.adminLink} href="/reconciliation">
+              Reconciliation
+            </Link>
+          ) : null}
+          <SignOutButton />
+        </div>
       </header>
 
       {error ? (
@@ -69,6 +88,7 @@ export default async function InventoryPage() {
           settings={settings}
           serverNow={serverNow}
           overrideAuthors={overrideAuthors}
+          viewerRole={viewerRole}
         />
       )}
     </main>

@@ -5,7 +5,7 @@ import { SearchField } from '@/components/search-field'
 import { FilterBar, type SortKey, type StatusFilter } from '@/components/filter-bar'
 import { InventoryRow } from '@/components/inventory-row'
 import { isStale, stockStatus } from '@/lib/status'
-import type { AppSettings, InventoryViewRow } from '@/lib/types'
+import type { AppRole, AppSettings, InventoryViewRow } from '@/lib/types'
 import styles from './inventory-list.module.css'
 
 /**
@@ -37,6 +37,7 @@ export function InventoryList({
   settings,
   serverNow,
   overrideAuthors,
+  viewerRole,
 }: {
   rows: InventoryViewRow[]
   categories: string[]
@@ -47,6 +48,8 @@ export function InventoryList({
    */
   serverNow: number
   overrideAuthors: Record<string, string>
+  /** Drives which step-2/step-3 controls render. The database is the real gate. */
+  viewerRole: AppRole
 }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
@@ -181,6 +184,7 @@ export function InventoryList({
                 expanded={expanded.has(key)}
                 onToggle={() => toggle(key)}
                 overrideAuthor={row.override_by ? (overrideAuthors[row.override_by] ?? null) : null}
+                viewerRole={viewerRole}
               />
             )
           })}
