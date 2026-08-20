@@ -750,7 +750,7 @@ export async function runEnumerationEquivalence(report, baseUrl, runId) {
 
 export const INVALID_KEY_IDS = ['5.5a', '5.5b']
 export const INVALID_KEY_DESCRIPTIONS = {
-  '5.5a': 'an invalid anon key redirects to /login?error=unavailable, NOT to /login/check-email',
+  '5.5a': 'an invalid anon key redirects to /login?error=unavailable via the key-rejection path (signInWithOtp reached), not a pre-send config throw and not /login/check-email',
   '5.5b': "the server-side log line survives the fix ('[login] signInWithOtp failed: unavailable:')",
 }
 
@@ -790,24 +790,35 @@ export async function runInvalidKeyProbe(report, baseUrl, runId, readStderr) {
   const expected = '/login?error=unavailable'
   const observedPathAndQuery = path === null ? String(submitted.location) : `${path}${search}`
 
-  // Asserted as the EXACT expected value. "Anything other than check-email" would pass on a
-  // 500, on a framework error page, and on any future wrong-but-different redirect.
+  // The redirect ALONE is not enough: /login?error=unavailable is ALSO produced when
+  // NEXT_PUBLIC_SITE_URL is missing (siteUrl() throws before the send -> unavailable:threw).
+  // 5.5a must assert the KEY-REJECTION cause specifically, so it also requires evidence that
+  // signInWithOtp was actually reached (the "failed: unavailable:" log) and NOT a pre-send
+  // throw (the "threw:" / missing-site-url log). Otherwise a misconfigured harness would show
+  // this as a passing key-rejection test — a false green in the false-green detector.
+  const stderr = typeof readStderr === 'function' ? readStderr() : ''
+  const reachedSend = /\[login\] signInWithOtp failed: unavailable:/.test(stderr)
+  const threwBeforeSend =
+    /\[login\] signInWithOtp threw:/.test(stderr) ||
+    /Missing environment variable NEXT_PUBLIC_SITE_URL/.test(stderr)
+
   report.check(
     '5.5a',
     INVALID_KEY_DESCRIPTIONS['5.5a'],
-    observedPathAndQuery === expected,
-    `expected ${expected}; observed HTTP ${submitted.status} -> ` +
-      `${JSON.stringify(submitted.location)}` +
+    observedPathAndQuery === expected && reachedSend && !threwBeforeSend,
+    `expected ${expected} via the key-rejection path; observed HTTP ${submitted.status} -> ` +
+      `${JSON.stringify(submitted.location)}; reachedSend=${reachedSend}; threwBeforeSend=${threwBeforeSend}` +
       (path === '/login/check-email'
         ? ' — THIS IS THE DEFECT: a failed send was reported to the user as a sent email'
-        : ''),
+        : threwBeforeSend
+          ? ' — the redirect was caused by a pre-send config throw, NOT a rejected key'
+          : ''),
   )
 
-  const stderr = typeof readStderr === 'function' ? readStderr() : ''
   report.check(
     '5.5b',
     INVALID_KEY_DESCRIPTIONS['5.5b'],
-    /\[login\] signInWithOtp failed: unavailable:/.test(stderr),
+    reachedSend,
     'the child process stderr carried no matching line. Last 400 characters: ' +
       JSON.stringify(String(stderr).slice(-400)),
   )

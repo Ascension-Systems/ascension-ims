@@ -228,13 +228,30 @@ async function main() {
     } else {
       write('  child is up. Submitting the login form.\n')
       await runInvalidKeyProbe(report, baseUrl, runId, () => output)
-      report.notes.push(
-        '5.5 exercised the real code path end to end in a single process: the form POST ' +
-          'reached requestMagicLink, signInWithOtp failed against a gateway that rejected the ' +
-          'invalid key, classifyAuthError classified it, and the redirect the user actually ' +
-          'received was asserted. This is the branch a tester holding valid credentials can ' +
-          'never reach by accident.',
-      )
+      // Report the ACTUAL cause, not an assumed one. The redirect to /login?error=unavailable
+      // is produced both by a rejected key (signInWithOtp reached) and by a missing
+      // NEXT_PUBLIC_SITE_URL (a throw before the send). Claiming "rejected the invalid key"
+      // unconditionally would be a false note when the run never reached signInWithOtp.
+      const reachedSend = /\[login\] signInWithOtp failed: unavailable:/.test(output)
+      const threwBeforeSend =
+        /\[login\] signInWithOtp threw:/.test(output) ||
+        /Missing environment variable NEXT_PUBLIC_SITE_URL/.test(output)
+      if (reachedSend && !threwBeforeSend) {
+        report.notes.push(
+          '5.5 exercised the real code path end to end in a single process: the form POST ' +
+            'reached requestMagicLink, signInWithOtp failed against a gateway that rejected the ' +
+            'invalid key, classifyAuthError classified it, and the redirect the user actually ' +
+            'received was asserted. This is the branch a tester holding valid credentials can ' +
+            'never reach by accident.',
+        )
+      } else {
+        report.notes.push(
+          '5.5 reached the /login?error=unavailable redirect, but the child stderr shows the ' +
+            'cause was a PRE-SEND configuration throw (e.g. missing NEXT_PUBLIC_SITE_URL), not a ' +
+            'rejected key. The redirect is correct; the key-rejection path was not exercised, and ' +
+            '5.5a reflects that.',
+        )
+      }
     }
   } finally {
     kill()
