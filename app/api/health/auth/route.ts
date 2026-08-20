@@ -63,6 +63,32 @@ const HEALTH_PROBE_ADDRESS = 'portal-health-probe@example.invalid'
 const RATE_LIMIT = 6
 const RATE_WINDOW_MS = 60_000
 
+/**
+ * THE PER-IP LIMIT ABOVE IS NOT SUFFICIENT ON ITS OWN, AND THIS IS WHY.
+ *
+ * `clientIpKey()` reads `x-nf-client-connection-ip` and falls back to `x-forwarded-for`. Netlify
+ * overwrites the former, but the fallback is a client-settable header — so an unauthenticated
+ * caller who rotates `x-forwarded-for` gets a fresh bucket on every request and the per-IP limit
+ * stops bounding anything. That is normally acceptable (see the note in `lib/rate-limit.ts`:
+ * evading your own limit only puts you where you would be with no limiter), but the reasoning
+ * does NOT transfer here, because on this route the limiter is not protecting the caller's own
+ * budget — it is protecting a THIRD PARTY. Every allowed request makes a real `signInWithOtp`
+ * call to the project's GoTrue, which is the single shared component whose failure locks out all
+ * ~120 reps. Unbounded public traffic into it is a self-inflicted denial of service: Supabase
+ * throttles this deployment's egress IP, and then real sign-ins start failing.
+ *
+ * So there is a second, IP-INDEPENDENT ceiling on outbound probes. It is generous — an order of
+ * magnitude above the per-IP limit, so no legitimate monitor, operator or verification run can
+ * reach it — but it is finite, which is the entire point. The constant key is deliberate: every
+ * caller shares this bucket precisely so that no header can be used to escape it.
+ *
+ * Still per-instance, like everything in `lib/rate-limit.ts`. It bounds outbound probes to
+ * (instances x 60)/min rather than to infinity. That is friction, not a guarantee, and a shared
+ * store remains the step-2 answer.
+ */
+const GLOBAL_PROBE_LIMIT = 60
+const GLOBAL_PROBE_KEY = 'all'
+
 /** Never statically cached: a cached health signal is a stale health signal. */
 export const dynamic = 'force-dynamic'
 
@@ -192,7 +218,9 @@ function body(mapped: Mapped): HealthBody {
 }
 
 export async function GET(request: Request) {
-  // BEFORE any vendor call, so a rejected request costs zero GoTrue traffic.
+  // BOTH limits run BEFORE any vendor call, so a rejected request costs zero GoTrue traffic.
+  // Per-IP first (it is the one that gives an honest retry-after to a single well-behaved
+  // caller), then the IP-independent ceiling that a spoofed header cannot escape.
   const rl = checkRateLimit('health:auth', clientIpKey(request.headers), RATE_LIMIT, RATE_WINDOW_MS)
   if (!rl.allowed) {
     return NextResponse.json(
@@ -200,6 +228,22 @@ export async function GET(request: Request) {
       {
         status: 429,
         headers: { ...JSON_HEADERS, 'retry-after': String(rl.retryAfterSeconds) },
+      },
+    )
+  }
+
+  const globalRl = checkRateLimit(
+    'health:auth:global',
+    GLOBAL_PROBE_KEY,
+    GLOBAL_PROBE_LIMIT,
+    RATE_WINDOW_MS,
+  )
+  if (!globalRl.allowed) {
+    return NextResponse.json(
+      { error: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.' },
+      {
+        status: 429,
+        headers: { ...JSON_HEADERS, 'retry-after': String(globalRl.retryAfterSeconds) },
       },
     )
   }

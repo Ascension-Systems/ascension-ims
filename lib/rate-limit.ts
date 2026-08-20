@@ -28,36 +28,81 @@ import 'server-only'
 
 export type RateLimitVerdict = { allowed: true } | { allowed: false; retryAfterSeconds: number }
 
-type Window = { count: number; windowStartMs: number }
+/**
+ * `windowStartMs` fixes the window boundary and must NOT move while a window is open — moving it
+ * would turn the fixed window into a sliding one and let a steady caller exceed the limit.
+ * `lastSeenMs` is separate and exists only for eviction ordering. Do not merge them.
+ */
+type Window = { count: number; windowStartMs: number; lastSeenMs: number }
 
 /**
- * Module-level, deliberately. It is process-scoped state and that is the whole limitation
- * documented above.
+ * ONE MAP PER BUCKET, NOT ONE MAP FOR EVERYTHING. THIS IS A SECURITY PROPERTY, NOT TIDINESS.
+ *
+ * State was previously a single flat `Map` keyed `${bucket}:${key}`, with overflow handled by
+ * `windows.clear()`. That coupled every limiter in the process to every other one, and the
+ * buckets do not have comparable key cardinality:
+ *
+ *   commitments:post      keyed on a revalidated user.id  -> ~120 keys, bounded by the user list
+ *   health:auth           keyed on clientIpKey()          -> UNBOUNDED; the header is spoofable
+ *   health:auth:global    a single constant key           -> exactly 1 key
+ *
+ * So an unauthenticated caller rotating `x-forwarded-for` against the public `/api/health/auth`
+ * could mint unlimited `health:auth` keys, overflow the shared map, and reset the counters of
+ * the other two buckets as collateral — flushing every signed-in user's `commitments:post`
+ * budget AND the global probe ceiling that exists to bound outbound vendor traffic. A public,
+ * unauthenticated endpoint must not be able to erase an authenticated endpoint's limiter, and
+ * a limiter must not be able to erase its own backstop.
+ *
+ * Per-bucket maps make that structurally impossible: eviction is scoped to the bucket that
+ * overflowed. The unbounded bucket churns within its own cap and touches nothing else, while
+ * the two low-cardinality buckets never reach their cap and are therefore never evicted at all.
+ *
+ * Bucket names are string literals at the call sites, so the number of buckets is fixed at
+ * author time and cannot be grown by a request.
  */
-const windows = new Map<string, Window>()
+const buckets = new Map<string, Map<string, Window>>()
 
 /**
- * Bounded without a timer. A `setInterval` in a serverless function keeps the instance alive
- * and leaks; eviction is therefore amortised onto the calls themselves.
+ * Per-bucket cap, bounded without a timer. A `setInterval` in a serverless function keeps the
+ * instance alive and leaks; eviction is therefore amortised onto the calls themselves.
  */
-const MAX_ENTRIES = 5000
+const MAX_ENTRIES_PER_BUCKET = 5000
 
-function evictIfLarge(now: number): void {
-  if (windows.size <= MAX_ENTRIES) return
+/** How long a window must be untouched before it counts as dead. */
+const DEAD_AFTER_MS = 10 * 60_000
+
+function evictIfLarge(windows: Map<string, Window>, now: number): void {
+  if (windows.size <= MAX_ENTRIES_PER_BUCKET) return
+
   for (const [key, w] of windows) {
-    // An entry whose window is older than the longest window in use is dead. 60s is the only
+    // An entry untouched for longer than the longest window in use is dead. 60s is the only
     // window this codebase uses; the generous multiple keeps this correct if a longer one is
     // added later without anyone remembering to update this line.
-    if (now - w.windowStartMs >= 10 * 60_000) windows.delete(key)
+    if (now - w.lastSeenMs >= DEAD_AFTER_MS) windows.delete(key)
   }
-  if (windows.size > MAX_ENTRIES) windows.clear()
+  if (windows.size <= MAX_ENTRIES_PER_BUCKET) return
+
+  // Still over. Evict LEAST-RECENTLY-USED, never `clear()`.
+  //
+  // Least-recently-USED, not oldest-window-START: those are different, and the difference is
+  // the attack. A counter that is being actively hammered keeps the same `windowStartMs` for
+  // the whole window, so sorting on window start would evict exactly the busiest, most
+  // security-relevant counters first and hand a flooder a free reset. `lastSeenMs` is bumped
+  // on every hit, so an actively-used counter is the LAST thing discarded and a flood of
+  // single-use spoofed keys is the first.
+  const byIdle = [...windows.entries()].sort((a, b) => a[1].lastSeenMs - b[1].lastSeenMs)
+  for (const [key] of byIdle) {
+    if (windows.size <= MAX_ENTRIES_PER_BUCKET) break
+    windows.delete(key)
+  }
 }
 
 /**
  * Fixed-window counter. Returns `{ allowed: true }` or `{ allowed: false, retryAfterSeconds }`.
  *
  * `bucket` namespaces the key so two routes limiting on the same value (an IP, a user id) can
- * never share a counter.
+ * never share a counter — and, per the note above, so that one bucket's key churn can never
+ * evict another bucket's state.
  */
 export function checkRateLimit(
   bucket: string,
@@ -66,17 +111,23 @@ export function checkRateLimit(
   windowMs: number,
 ): RateLimitVerdict {
   const now = Date.now()
-  evictIfLarge(now)
 
-  const mapKey = `${bucket}:${key}`
-  const existing = windows.get(mapKey)
+  let windows = buckets.get(bucket)
+  if (!windows) {
+    windows = new Map<string, Window>()
+    buckets.set(bucket, windows)
+  }
+  evictIfLarge(windows, now)
+
+  const existing = windows.get(key)
 
   if (!existing || now - existing.windowStartMs >= windowMs) {
-    windows.set(mapKey, { count: 1, windowStartMs: now })
+    windows.set(key, { count: 1, windowStartMs: now, lastSeenMs: now })
     return { allowed: true }
   }
 
   existing.count += 1
+  existing.lastSeenMs = now
   if (existing.count <= limit) {
     return { allowed: true }
   }

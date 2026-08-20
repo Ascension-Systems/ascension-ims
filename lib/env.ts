@@ -95,3 +95,31 @@ export function siteUrl(): string {
 
   return url.origin
 }
+
+/**
+ * Whether the auth cookie should carry the `Secure` attribute.
+ *
+ * @supabase/ssr's DEFAULT_COOKIE_OPTIONS sets `path`, `sameSite: 'lax'`, `httpOnly: false` and a
+ * 400-day `maxAge`, and does NOT set `secure`. The two cookie writers override `httpOnly`; this
+ * supplies the missing `secure`. Without it the session cookie is eligible to be sent over
+ * plaintext http, which for a portal holding a real session is a finding a pen test will raise.
+ * `Strict-Transport-Security` (next.config.mjs) closes most of that window but not the first
+ * request a browser ever makes to the origin, and HSTS is deliberately not preloaded.
+ *
+ * ------------------------------------------------------------------------------------
+ * THIS FUNCTION MUST NEVER THROW. THAT IS THE WHOLE REASON IT DOES NOT CALL siteUrl().
+ * ------------------------------------------------------------------------------------
+ * It runs inside the cookie `setAll` callback on EVERY request, including in middleware. If it
+ * threw when NEXT_PUBLIC_SITE_URL were unset or malformed, a missing variable would stop the
+ * session refreshing rather than merely stopping a magic link being sent — it would turn a
+ * configuration mistake into a total sign-in outage. So it reads the raw value, answers a plain
+ * boolean, and treats anything it cannot positively confirm as "not https".
+ *
+ * Failing to `false` is the right direction here and is NOT fail-open in any meaningful sense:
+ * the worst case is a cookie without `Secure` on a deployment that did not configure its own
+ * site URL — exactly today's behaviour — whereas failing to `true` would silently break
+ * http://localhost development, which is the documented supported setup (README step 2).
+ */
+export function cookieSecure(): boolean {
+  return process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://') === true
+}
