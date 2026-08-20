@@ -69,9 +69,14 @@ export default async function InventoryPage() {
               navigates there directly is redirected back; RLS would in any case show them
               only their own rows. */}
           {viewerRole === 'admin' ? (
-            <Link className={styles.adminLink} href="/reconciliation">
-              Reconciliation
-            </Link>
+            <>
+              <Link className={styles.adminLink} href="/team">
+                Team
+              </Link>
+              <Link className={styles.adminLink} href="/reconciliation">
+                Reconciliation
+              </Link>
+            </>
           ) : null}
           <SignOutButton />
         </div>
