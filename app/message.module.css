@@ -147,3 +147,14 @@
 .noticeText {
   display: block;
 }
+
+.subtle {
+  margin-top: var(--space-3);
+  font-size: var(--text-components);
+  color: var(--ink-soft);
+}
+
+.help {
+  font-size: var(--text-label);
+  color: var(--ink-faint);
+}
