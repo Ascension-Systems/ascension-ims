@@ -3,16 +3,22 @@
 
    A stock-availability tool a furniture rep trusts enough to quote a customer.
    Warm, confident, operations-grade. Warm paper ground, warm near-black ink,
-   and ONE accent — a deep pine green — for brand, hierarchy, and interaction.
+   and ONE accent — Ascension IT navy — for brand, hierarchy, and interaction.
+
+   BRAND: the accent is sampled from ascensionit.com — navy #0A2C4D (their header
+   and anchor colour) with a cyan #1DB9E1 signature drawn from the logo's gradient.
+   The cyan is a highlight only (it is too light to carry text) and appears in one
+   place: the brand line under the nav bar, echoing the logo's navy→cyan sweep.
 
    STATUS IS STILL NOT CARRIED BY COLOUR. The four stock statuses are encoded
    with SHAPE, GLYPH, LABEL, BORDER TREATMENT and the left RULE (position +
    style), so the set survives the removal of colour AND lightness. The accent
-   green is used only for brand/interactive elements, NEVER to signal status,
+   navy is used only for brand/interactive elements, NEVER to signal status,
    so the colour-blind-safe property holds intact. (Supersedes D2's achromatic
    constraint by Human decision 2026-08-20; the not-by-colour requirement stays.)
 
-   Contrast: ink on paper ~17:1. --ink-soft 7.5:1. --ink-faint 5.7:1 (AA). Accent 6.1:1.
+   Contrast: ink on paper ~17:1. --ink-soft 7.5:1. --ink-faint 5.7:1 (AA). Navy accent
+   ~13:1 on paper and as white-on-navy — well above the pine it replaced (6.1:1).
    --ink-faint was #8a827a (3.6:1) and FAILED both AA and this project's own 7:1 floor;
    the SKU rides on --ink-soft because it is the string a rep reads aloud to a customer.
    Mobile-first: every rule is written for 375x667 and widens upward.
@@ -29,11 +35,15 @@
   --line: #e8e3da;
   --line-soft: #f1ede6;
 
-  /* --- The one accent: deep pine. Brand, hierarchy, interaction. NOT status. --- */
-  --accent: #1f5c4a;
-  --accent-deep: #143f32;
-  --accent-tint: #e9f0ec;
-  --accent-line: #cfe0d8;
+  /* --- The one accent: Ascension IT navy. Brand, hierarchy, interaction. NOT status. --- */
+  --accent: #0a2c4d;
+  --accent-deep: #071a2c;
+  --accent-tint: #e8f1f9;
+  --accent-line: #c4d8e8;
+
+  /* --- Cyan signature, from the logo gradient. Highlight only, never text. --- */
+  --brand-cyan: #1db9e1;
+  --brand-cyan-deep: #019dc5;
 
   /* Status ink — the achromatic channel that carries stock status. Kept
      separate from --ink so status marks read as deliberate, not incidental. */

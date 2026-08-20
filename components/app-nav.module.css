@@ -5,8 +5,16 @@
   top: 0;
   z-index: 30;
   background: var(--surface);
-  border-bottom: var(--border-width) solid var(--line);
   padding-top: env(safe-area-inset-top);
+}
+
+/* The one cyan touch: a 3px brand line under the bar, navy→cyan, echoing the sweep of the
+   Ascension logo. This is the signature — the accent stays disciplined everywhere else. */
+.bar::after {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--brand-cyan-deep) 60%, var(--brand-cyan) 100%);
 }
 
 .top {
