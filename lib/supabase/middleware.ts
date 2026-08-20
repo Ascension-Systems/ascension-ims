@@ -18,6 +18,14 @@ const PUBLIC_PATHS = [
   '/auth/callback',
   '/auth/auth-code-error',
   '/api/health/auth',
+  // Enrollment MUST be public: the whole point is that a rep who has no account yet can set
+  // one up. Leaving it out made /api/enroll return 401 to every caller, which silently broke
+  // onboarding entirely -- the endpoint was unreachable by exactly the people it exists for.
+  // It is not unguarded: it demands a valid enrollment code AND an address an admin already
+  // added to the allowlist, it is rate limited per-IP and globally, and every refusal returns
+  // one identical message so it cannot be used to enumerate the roster.
+  '/join',
+  '/api/enroll',
 ]
 
 const isPublic = (pathname: string) =>
