@@ -5,12 +5,10 @@
   padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
 }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) var(--space-5);
+/* The page intro below the shared nav bar: eyebrow, title, one line of context, and any
+   page-level action, on the surface band. */
+.intro {
+  padding: var(--space-5) var(--space-4);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -40,31 +38,8 @@
   max-width: 44ch;
 }
 
-.nav {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap-chip);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: var(--text-components);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.back:hover {
-  border-color: var(--ink-faint);
+.introActions {
+  margin-top: var(--space-4);
 }
 
 .summary {

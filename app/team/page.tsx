@@ -1,10 +1,9 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { InviteForm } from '@/components/invite-form'
 import { RelativeTime } from '@/components/relative-time'
-import { SignOutButton } from '@/components/sign-out-button'
+import { AppNav } from '@/components/app-nav'
 import styles from '@/app/reconciliation/page.module.css'
 
 /**
@@ -41,26 +40,16 @@ export default async function TeamPage() {
 
   return (
     <main className={styles.main}>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Admin</p>
-          <h1 className={styles.title}>Team access</h1>
-          <p className={styles.subtitle}>
-            Add the reps who should have access, then share the code below. They set themselves
-            up — no email links, nothing for you to send.
-          </p>
-        </div>
-        <SignOutButton />
-      </header>
+      <AppNav role="admin" />
 
-      <nav className={styles.nav}>
-        <Link className={styles.back} href="/inventory">
-          Inventory
-        </Link>
-        <Link className={styles.back} href="/reconciliation">
-          Reconciliation
-        </Link>
-      </nav>
+      <div className={styles.intro}>
+        <p className={styles.eyebrow}>Admin</p>
+        <h1 className={styles.title}>Team access</h1>
+        <p className={styles.subtitle}>
+          Add the reps who should have access, then share the code below. They set themselves
+          up — no email links, nothing for you to send.
+        </p>
+      </div>
 
       <div className={styles.summary}>
         <div className={styles.stat}>

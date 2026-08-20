@@ -5,14 +5,10 @@
   padding-bottom: var(--space-6);
 }
 
-/* A quiet masthead band: the wordmark sits on the surface, the list on paper,
-   so the page has two registers instead of one flat sheet. */
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) var(--space-5);
+/* The page intro sits below the shared nav bar: the screen's own title and one line of
+   context, on the surface band, so the page has two registers instead of one flat sheet. */
+.intro {
+  padding: var(--space-5) var(--space-4);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -54,28 +50,3 @@
   }
 }
 
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 0 0 auto;
-}
-
-.adminLink {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: var(--text-components);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.adminLink:hover {
-  border-color: var(--ink-faint);
-}

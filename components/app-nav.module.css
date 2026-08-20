@@ -1,0 +1,81 @@
+/* The unified top app bar. Sticky so navigation is always in reach on a phone, and padded for
+   the notch via the safe-area inset. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--surface);
+  border-bottom: var(--border-width) solid var(--line);
+  padding-top: env(safe-area-inset-top);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: 0 var(--space-4);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+
+/* The page tabs. A short horizontal strip that scrolls if it ever outgrows the screen, so a
+   narrow phone never clips a destination. */
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-chip);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  border: var(--border-width) solid var(--line);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+}
+
+/* Active: filled pine with light text. The fill (not merely a colour swap) is what makes the
+   current screen legible without relying on hue. */
+.tabActive,
+.tabActive:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}

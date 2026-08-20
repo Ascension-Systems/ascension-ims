@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSettings } from '@/lib/settings'
 import { categoriesOf, getInventory } from '@/lib/inventory'
 import { InventoryList } from '@/components/inventory-list'
-import Link from 'next/link'
-import { SignOutButton } from '@/components/sign-out-button'
+import { AppNav } from '@/components/app-nav'
 import styles from './page.module.css'
 
 /**
@@ -55,32 +54,16 @@ export default async function InventoryPage() {
 
   return (
     <main className={styles.main}>
-      <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Inventory</h1>
-          <p className={styles.subtitle}>
-            {settings.inventory_authority === 'quickbooks'
-              ? 'Availability per QuickBooks, with rep commitments shown separately.'
-              : 'Availability including rep commitments not yet in QuickBooks.'}
-          </p>
-        </div>
-        <div className={styles.headerActions}>
-          {/* Admins get the reconciliation queue -- their paperwork backlog. A rep who
-              navigates there directly is redirected back; RLS would in any case show them
-              only their own rows. */}
-          {viewerRole === 'admin' ? (
-            <>
-              <Link className={styles.adminLink} href="/team">
-                Team
-              </Link>
-              <Link className={styles.adminLink} href="/reconciliation">
-                Reconciliation
-              </Link>
-            </>
-          ) : null}
-          <SignOutButton />
-        </div>
-      </header>
+      <AppNav role={viewerRole} />
+
+      <div className={styles.intro}>
+        <h1 className={styles.title}>Inventory</h1>
+        <p className={styles.subtitle}>
+          {settings.inventory_authority === 'quickbooks'
+            ? 'Availability per QuickBooks, with rep commitments shown separately.'
+            : 'Availability including rep commitments not yet in QuickBooks.'}
+        </p>
+      </div>
 
       {error ? (
         <p className={styles.error}>

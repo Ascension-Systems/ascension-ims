@@ -1,10 +1,9 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { getPendingCommitments, namesForSkus } from '@/lib/commitments'
 import { RelativeTime } from '@/components/relative-time'
-import { SignOutButton } from '@/components/sign-out-button'
+import { AppNav } from '@/components/app-nav'
 import { SyncButton } from '@/components/sync-button'
 import styles from './page.module.css'
 
@@ -51,24 +50,19 @@ export default async function ReconciliationPage() {
 
   return (
     <main className={styles.main}>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Admin</p>
-          <h1 className={styles.title}>Reconciliation</h1>
-          <p className={styles.subtitle}>
-            Commitments recorded in the portal that QuickBooks has not confirmed yet. This is
-            the paperwork still to be entered.
-          </p>
-        </div>
-        <SignOutButton />
-      </header>
+      <AppNav role="admin" />
 
-      <nav className={styles.nav}>
-        <Link className={styles.back} href="/inventory">
-          Inventory
-        </Link>
-        <SyncButton />
-      </nav>
+      <div className={styles.intro}>
+        <p className={styles.eyebrow}>Admin</p>
+        <h1 className={styles.title}>Reconciliation</h1>
+        <p className={styles.subtitle}>
+          Commitments recorded in the portal that QuickBooks has not confirmed yet. This is
+          the paperwork still to be entered.
+        </p>
+        <div className={styles.introActions}>
+          <SyncButton />
+        </div>
+      </div>
 
       {error ? (
         <p className={styles.error}>The queue could not be loaded. Try again in a moment.</p>
