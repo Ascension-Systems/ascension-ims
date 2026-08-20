@@ -89,6 +89,21 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (!user && !isPublic(pathname)) {
+    // An unauthenticated request to an API route must get a 401 the caller can act on, not a
+    // 307 to /login. A 307 preserves method and body, so a POST is silently re-aimed at an
+    // HTML page instead of being refused — the route handlers already return this exact 401
+    // shape, but middleware short-circuits before they run. Match their body.
+    if (pathname.startsWith('/api/')) {
+      const denied = NextResponse.json(
+        { error: 'NOT_AUTHENTICATED', message: 'Sign in to continue.' },
+        { status: 401 },
+      )
+      // Rule 3.
+      for (const cookie of supabaseResponse.cookies.getAll()) {
+        denied.cookies.set(cookie)
+      }
+      return denied
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = ''
