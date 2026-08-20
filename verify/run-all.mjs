@@ -101,6 +101,36 @@ function banner(cfg, extra = []) {
   )
 }
 
+// Accurate per-abort reasons. NO_CONFIG means exactly one thing — configuration is missing —
+// and using it for a failure that happened AFTER config validated (identities, fixtures, the
+// oracle) mislabels the cause. The specific failure stays in the abort's `detail`; these name
+// the stage. Same `NOT EXECUTED — …` convention as NO_CONFIG / NO_SCHEMA.
+const REASON_IDENTITIES = 'NOT EXECUTED — test identities could not be minted'
+const REASON_FIXTURES = 'NOT EXECUTED — fixture setup failed'
+const REASON_ORACLE = 'NOT EXECUTED — availability oracle unavailable'
+
+/**
+ * The manifest's own integrity, drift, and the sum invariant. None needs config, network or a
+ * database, so this runs on EVERY run of every path — the normal end of main() AND every abort.
+ * renderDispositionBlock PRINTS the sum; checkManifestIntegrity/checkDispositionSums ASSERT it.
+ * Returns the three booleans so the caller can fold them into the exit code.
+ */
+function renderManifestAndDisposition(allReports) {
+  const drift = checkDrift(MANIFEST, allReports, 'hosted')
+  write(renderDrift(drift))
+  const totals = computeDisposition(MANIFEST)
+  const integrity = checkManifestIntegrity(MANIFEST)
+  if (!integrity.ok) {
+    write(renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems))
+  }
+  const sums = checkDispositionSums(totals, MANIFEST)
+  if (!sums.ok) {
+    write(renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems))
+  }
+  write('\n' + renderDispositionBlock(totals) + '\n\n')
+  return { driftOk: drift.ok, integrityOk: integrity.ok, sumsOk: sums.ok }
+}
+
 /** Prints a per-attack NOT EXECUTED verdict for all four, then the summary, then exits 1. */
 function abort(reason, detail) {
   const reports = ATTACKS.map(([n, title]) => blockedReport(n, title, BLOCKED_METHOD, reason))
@@ -110,6 +140,10 @@ function abort(reason, detail) {
   })
   regression.print(reason, { labelWord: 'Target', kindWord: 'SUITE' })
   summarise(reports, { aborted: reason, abortDetail: detail, regression })
+  // F3: the manifest/disposition checks the comment claims "run on EVERY run" now actually do,
+  // including on this aborted path. They are pure functions of MANIFEST; drift handles the
+  // all-blocked case honestly on its own.
+  renderManifestAndDisposition([...reports, regression])
   process.exitCode = 1
 }
 
@@ -239,7 +273,7 @@ async function main() {
   try {
     minted = await provisionIdentities(cfg, identities)
   } catch (err) {
-    abort(NO_CONFIG, `test identities could not be minted: ${err?.message ?? err}`)
+    abort(REASON_IDENTITIES, `identities: ${err?.message ?? err}`)
     return
   }
 
@@ -257,7 +291,7 @@ async function main() {
   try {
     await resetFixtures(cfg, identities)
   } catch (err) {
-    abort(NO_CONFIG, `the KYV fixtures could not be created: ${err?.message ?? err}`)
+    abort(REASON_FIXTURES, `fixtures: ${err?.message ?? err}`)
     return
   }
 
@@ -285,7 +319,7 @@ async function main() {
 
   if (!oracle.identity) {
     abort(
-      NO_CONFIG,
+      REASON_ORACLE,
       `public.v_inventory could not be read by service_role or by the admin session — ${oracle.label}`,
     )
     return
@@ -372,28 +406,16 @@ async function main() {
    * 7. Manifest drift, both directions, then the one authoritative
    *    disposition — computed here, never hand-counted anywhere.
    * ---------------------------------------------------------------- */
-  const drift = checkDrift(MANIFEST, regression ? [...reports, regression] : reports, 'hosted')
-  write(renderDrift(drift))
-
-  // The manifest's own integrity and the sum invariant. Neither needs config, network or a
-  // database, so they run on EVERY run of every runner — including one that aborted early.
-  // renderScope PRINTS the sum; these two ASSERT it, which is not the same thing.
-  const totals = computeDisposition(MANIFEST)
-  const integrity = checkManifestIntegrity(MANIFEST)
-  if (!integrity.ok) {
-    write(renderInvariantFailure('MANIFEST INTEGRITY — the declared inventory is malformed.', integrity.problems))
-  }
-  const sums = checkDispositionSums(totals, MANIFEST)
-  if (!sums.ok) {
-    write(renderInvariantFailure('DISPOSITION SUM INVARIANT — the printed figures do not reconcile.', sums.problems))
-  }
-
-  write('\n' + renderDispositionBlock(totals) + '\n\n')
+  // Same helper the abort path uses, so the two can never diverge. It prints drift, integrity,
+  // the sum invariant, and the disposition block, and returns the booleans for the exit code.
+  const { driftOk, integrityOk, sumsOk } = renderManifestAndDisposition(
+    regression ? [...reports, regression] : reports,
+  )
 
   const anyFailed = [...reports, ...(regression ? [regression] : [])].some((r) => !r.ok)
   const anyBlocking = reports.some((r) => r.isBlocked)
   process.exitCode =
-    hardError || anyFailed || anyBlocking || !drift.ok || !integrity.ok || !sums.ok ? 1 : 0
+    hardError || anyFailed || anyBlocking || !driftOk || !integrityOk || !sumsOk ? 1 : 0
 }
 
 main().catch((err) => {
