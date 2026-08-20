@@ -159,11 +159,17 @@ export function availabilityPresentation(
   const delta = row.qty_committed_portal
   const hasDelta = delta > 0
 
+  // Incoming is one of the five centrepiece figures the brief names, and it is most needed on
+  // exactly the item the fixtures stress: available at zero with stock on the way. It rides on
+  // the always-shown components line so it is visible on the COLLAPSED card, not only once the
+  // row is expanded. Shown only when there is genuinely incoming stock.
+  const incoming = row.qty_incoming > 0 ? ` · ${units(row.qty_incoming, row.uom)} incoming` : ''
+
   if (authority === 'quickbooks') {
     return {
       primaryValue: row.qty_available_source,
       primaryLabel: 'AVAILABLE (QUICKBOOKS)',
-      componentsLine: `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks`,
+      componentsLine: `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks${incoming}`,
       secondaryLine: hasDelta ? `Counting rep commitments: ${row.qty_available} available` : null,
       advisoryLine: hasDelta
         ? `${delta} more committed by reps, not yet in QuickBooks → ${row.qty_available} available`
@@ -175,8 +181,8 @@ export function availabilityPresentation(
     primaryValue: row.qty_available,
     primaryLabel: 'AVAILABLE',
     componentsLine: hasDelta
-      ? `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_total} committed (${row.qty_committed_source} QuickBooks + ${delta} rep)`
-      : `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks`,
+      ? `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_total} committed (${row.qty_committed_source} QuickBooks + ${delta} rep)${incoming}`
+      : `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks${incoming}`,
     secondaryLine: hasDelta
       ? `QuickBooks alone shows ${row.qty_available_source} available`
       : null,
