@@ -828,3 +828,70 @@ previous revision.
   directly. It is now covered against hosted, which is the point of this revision.
 - **Netlify deployment and the public URL.** Deploy is a push, and pushing is a Human action.
 - **Real Web Push.** Out of scope by the brief; nothing to verify.
+
+---
+
+## 10. Accepted open items — the 2026-08-19 security rework, loop 2
+
+Recorded here so they are decisions with reasons attached, not omissions. Each was evaluated
+and left open on its merits; none is "we ran out of time".
+
+**1. CSP `script-src` is still absent.** Re-evaluated in full and recorded in
+`next.config.mjs`. `'unsafe-inline'` was rejected because it permits exactly the inline
+execution the directive exists to prevent — the header would look like a CSP in a scan report
+and defend against nothing, which is an overclaim. Hashes were rejected because Next.js's inline
+bootstrap varies by build and by route, so a static hash list breaks the app on the next build.
+Nonces were rejected **for this pass, on scope**: they require per-request generation threaded
+through `lib/supabase/middleware.ts` into `app/layout.tsx`, which is a functional change on a
+hardening pass. **Step-2 recommendation:** `script-src 'self' 'nonce-…' 'strict-dynamic'`, with
+its own scope and its own approval. The four directives that *are* present —
+`frame-ancestors`, `base-uri`, `form-action`, `object-src` — are unchanged and remain
+enforceable with no behavioural risk.
+
+**2. The second, timing-based enumeration channel — DOCUMENTATION ONLY, and here is exactly
+why.** The rework brief named a second enumeration channel described in an auditor write-up.
+**That write-up is not in this repository and was not available at build stage.** The project
+and the pipeline repo were both searched for `timing`, `side channel`, `oracle`, `latency`,
+`elapsed`, `response time` and `second channel`; nothing matching exists in either.
+
+The only second enumeration channel documented anywhere in this repo is the **throttle-window
+oracle** — recorded in `app/login/auth-error.ts`, `docs/PLAN.md` and §7 above. It is
+time-*dependent* (it turns on whether you are inside the per-address throttle window) and is
+plausibly what was meant. **If that is the channel, it is CLOSED** by classifying
+`over_email_send_rate_limit` as SUPPRESSED: the registered and unregistered responses are now
+identical inside the window as well as outside it.
+
+**If a genuinely distinct response-LATENCY channel was meant** — the registered path performs an
+email send and is measurably slower than the unregistered path — **that is not closed, and no
+mitigation was implemented.** Constant-time padding costs every user real latency, is unreliable
+across serverless cold starts, and is a functional change. **No latency mitigation was invented
+against a channel whose description could not be read.** The write-up has been requested; if it
+describes a distinct channel this returns as a scoped follow-up.
+
+**3. The two `nextUrl.clone()` same-origin redirects, left in place.**
+`lib/supabase/middleware.ts` (the unauthenticated redirect to `/login` and the signed-in
+redirect to `/inventory`) and `app/signout/route.ts` still build their redirect from
+`request.nextUrl`, which is host-header-derived. **They are not the B3 defect and were not
+changed.** These are same-origin redirects returned to the requester's own browser: a poisoned
+host header there redirects *the attacker's own browser* to *the attacker's own host*. No email
+is sent, no token is issued, no victim is involved. The defect that was fixed is the one where a
+header steers a token into an *email addressed to someone else* — `emailRedirectTo` in
+`app/login/actions.ts` and the two outbound redirects in `app/auth/callback/route.ts`, both of
+which now resolve against `NEXT_PUBLIC_SITE_URL`.
+
+**4. The rate limiter is per-instance, not global.** `lib/rate-limit.ts` is a module-level `Map`
+in one process. On Netlify each serverless instance has its own and a cold start resets it, so
+the effective global limit is (instances × limit). It is friction, not a guarantee, and the file
+says so at the point of definition. `5.6h` evidences in-process behaviour on a single instance
+only and its detail string says that too. A shared store — Redis/Upstash, or a Postgres table —
+is the step-2 answer. The database remains the real gate in every case.
+
+**5. The httpOnly behavioural measurement is owed, scheduled, and not yet taken.** See §7,
+`5.7a`/`5.7b`. `httpOnly: true` is set on code evidence and a local mechanical probe; the
+behavioural SSR sign-in exercise was not executable at build stage and must not be written up as
+though it had been.
+
+**6. B2 — the two hosted auth settings are a HUMAN ACTION and no code can create them.** README
+step 3b, which now opens with that statement and carries two dated confirmation checkboxes.
+Until a person turns project-level signup off and pins the Redirect URL allow-list, those
+security properties **do not exist**, regardless of what this repository contains.

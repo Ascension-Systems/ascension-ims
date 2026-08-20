@@ -70,6 +70,27 @@ const SECURITY_HEADERS = [
    *   base-uri         blocks <base> injection retargeting every relative URL on the page
    *   form-action      blocks an injected form from posting the session somewhere else
    *   object-src       no plugin content is used anywhere
+   *
+   * ------------------------------------------------------------------------------------
+   * RE-EVALUATED IN THE SECURITY REWORK, 2026-08-19. STILL ABSENT. ACCEPTED OPEN ITEM.
+   * ------------------------------------------------------------------------------------
+   * `script-src` was re-examined against all three ways it could be added here, and each was
+   * rejected on its merits rather than deferred by default:
+   *
+   *   `script-src 'self' 'unsafe-inline'` — REJECTED. It permits exactly the inline execution
+   *     the directive exists to prevent. Shipping it would be an OVERCLAIM: the header would
+   *     look like a CSP in a scan report and defend against nothing.
+   *   hashes — REJECTED. Next.js's inline bootstrap content varies by build and by route, so a
+   *     static hash list breaks the app on the next build. A policy that breaks on rebuild gets
+   *     removed by whoever is on call, not fixed.
+   *   nonces — REJECTED FOR THIS PASS, ON SCOPE. They require per-request generation threaded
+   *     through `lib/supabase/middleware.ts` and into `app/layout.tsx`. That is a FUNCTIONAL
+   *     change on a hardening pass, not a header fix.
+   *
+   * Recorded here rather than only in a hand-off note, so the decision lives with the code.
+   * THE STEP-2 RECOMMENDATION IS `script-src 'self' 'nonce-…' 'strict-dynamic'`, generated in
+   * the middleware and threaded to the layout. It needs its own scope and its own approval.
+   * DO NOT ADD A NEW CSP DIRECTIVE HERE WITHOUT THAT SCOPE.
    */
   {
     key: 'Content-Security-Policy',

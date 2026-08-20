@@ -711,6 +711,26 @@ applied next week would otherwise show every row as days stale.
 
 ---
 
+## Known open items
+
+Carried from the 2026-08-19 security rework. Decisions with reasons, not omissions.
+`docs/VERIFICATION.md` §10 has the full account of each.
+
+- **No CSP `script-src`.** `'unsafe-inline'` would be an overclaim, build-variable hashes break
+  on rebuild, and nonces are a functional change through the middleware. Step-2 recommendation:
+  `script-src 'self' 'nonce-…' 'strict-dynamic'`.
+- **The rate limiter is per-instance friction, not a global guarantee.** A shared store is the
+  step-2 answer. The database is still the real gate.
+- **The `httpOnly` behavioural sign-in measurement is owed**, scheduled as assertions
+  `5.7a`/`5.7b` on a hosted run. It has not been taken.
+- **A possible response-latency enumeration channel is unassessed.** The auditor write-up
+  describing it was not available at build stage, and no mitigation was invented against a
+  description that could not be read.
+- **Step 3b is a Human action.** Until a person turns project-level signup off and pins the
+  Redirect URL allow-list in the Supabase dashboard, those security properties do not exist.
+
+---
+
 ## Deployment
 
 Netlify connects to this repository and deploys on **push to `main`**. Environment variables
