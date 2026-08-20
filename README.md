@@ -554,6 +554,16 @@ A few decisions worth knowing before changing anything:
   indefinitely. **That is the default, not a special case.**
 - **`available` is never clamped at zero.** A negative figure means the source dropped on-hand
   below what is already spoken for — exactly the condition a rep needs to see.
+- **The Supabase auth cookie is written `httpOnly: true`,** overriding `@supabase/ssr`'s
+  documented default of `false`. It is set at the two writers that actually emit a `Set-Cookie`
+  header — `lib/supabase/server.ts` and the response writer in `lib/supabase/middleware.ts` —
+  and deliberately **not** on `request.cookies.set`, which mutates the in-memory request and
+  emits no header. `secure` and `sameSite` are deliberately not set: `secure: true` breaks
+  `http://localhost` development. Nothing reads this cookie from JavaScript today —
+  `lib/supabase/client.ts` has **zero importers** and there is no `document.cookie` anywhere in
+  the repository. **If step 2 introduces a browser Supabase client, that is a measured
+  decision, not a silent revert.** Assertions `5.7a` / `5.7b` take the behavioural measurement
+  on a hosted run.
 
 ### The QuickBooks stub
 

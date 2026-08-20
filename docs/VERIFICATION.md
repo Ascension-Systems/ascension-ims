@@ -671,23 +671,23 @@ the code can count appears in the prose of docs/VERIFICATION.md.
 
   REGRESSION SUITE 5 — magic-link request failure modes
 
-    Total distinct assertion ids .................................. 35
-    Executable remotely  (npm run verify) ......................... 28
-      of which conditional on a precondition ...................... 11
+    Total distinct assertion ids .................................. 37
+    Executable remotely  (npm run verify) ......................... 30
+      of which conditional on a precondition ...................... 13
     STATIC — asserts the migration source, not deployed ........... 5
     NOT EXECUTED on the hosted path ............................... 2
 
     Executes live ONLY under npm run verify:local ................. 0
-    Executes live ONLY under npm run verify ....................... 28
+    Executes live ONLY under npm run verify ....................... 30
     Executes live on BOTH paths ................................... 0
     Executes live on NEITHER path ................................. 7
 
-    0 + 0 + 28 + 7 = 35 (declared total 35)
+    0 + 0 + 30 + 7 = 37 (declared total 37)
 
     Remote-only :
       5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
       5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17, 5.2a, 5.2b, 5.2c, 5.3a, 5.3b, 5.3c, 5.3d, 5.4a,
-      5.4b, 5.4c, 5.4d
+      5.4b, 5.4c, 5.4d, 5.7a, 5.7b
     Neither     :
       5.C1, 5.C2, 5.C3, 5.C4, 5.C5, 5.5a, 5.5b
     Also run by `npm run verify:login-predicate` (22 ids):
@@ -697,7 +697,7 @@ the code can count appears in the prose of docs/VERIFICATION.md.
     Opt-in      : 5.5b executes under `npm run verify:login-failure`
 
     Per suite (hosted / local, executable live or conditional):
-      suite 5: 35 ids — hosted 28 executable, 5 STATIC, 2 NOT EXECUTED | local 0 executable, 35 absent
+      suite 5: 37 ids — hosted 30 executable, 5 STATIC, 2 NOT EXECUTED | local 0 executable, 37 absent
 
   READ "executable remotely" AS A MAXIMUM, NOT A PROMISE. It counts the conditional
   assertions as executable, and each of those has a precondition that can fail to hold:

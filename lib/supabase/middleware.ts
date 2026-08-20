@@ -34,11 +34,26 @@ export async function updateSession(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         for (const { name, value } of cookiesToSet) {
+          // NOT given httpOnly, deliberately. This mutates the in-memory REQUEST
+          // representation so the rest of this request sees the refreshed token; it does not
+          // emit a Set-Cookie header. It takes no options today and must keep taking none.
           request.cookies.set(name, value)
         }
         supabaseResponse = NextResponse.next({ request })
         for (const { name, value, options } of cookiesToSet) {
-          supabaseResponse.cookies.set(name, value, options)
+          // THIS is the writer that produces a Set-Cookie header, and it is the one that gets
+          // the flag. `httpOnly: true` is set here rather than left at @supabase/ssr's default
+          // (`false`). No browser Supabase client is wired up in step 1 —
+          // `lib/supabase/client.ts` has zero importers — so nothing reads this cookie from
+          // JavaScript. If step 2 introduces a browser client, this is the line that will need
+          // a measured decision, not a silent revert.
+          //
+          // `secure` and `sameSite` are deliberately NOT set: `secure: true` breaks
+          // http://localhost development and neither is in scope for this finding.
+          //
+          // The server-side READ path is unaffected. `getAll()` above reads the inbound
+          // Cookie header, which httpOnly does not touch.
+          supabaseResponse.cookies.set(name, value, { ...options, httpOnly: true })
         }
       },
     },

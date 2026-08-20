@@ -19,7 +19,15 @@ export async function createClient() {
       setAll(cookiesToSet) {
         try {
           for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options)
+            // `httpOnly: true` is set here rather than left at @supabase/ssr's default
+            // (`false`). No browser Supabase client is wired up in step 1 —
+            // `lib/supabase/client.ts` has zero importers — so nothing reads this cookie from
+            // JavaScript. If step 2 introduces a browser client, this is the line that will
+            // need a measured decision, not a silent revert.
+            //
+            // `secure` and `sameSite` are deliberately NOT set: `secure: true` breaks
+            // http://localhost development and neither is in scope for this finding.
+            cookieStore.set(name, value, { ...options, httpOnly: true })
           }
         } catch {
           // A Server Component cannot set cookies and throws here. The catch is safe

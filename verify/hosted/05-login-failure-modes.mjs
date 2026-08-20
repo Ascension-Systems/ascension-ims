@@ -41,7 +41,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Report } from '../lib/report.mjs'
 import { MANIFEST } from '../lib/manifest.mjs'
 import { REPO } from './lib/config.mjs'
-import { NOT_EXECUTED_NO_BASE_URL } from './lib/app-probe.mjs'
+import { NOT_EXECUTED_NO_BASE_URL, NOT_EXECUTED_COOKIE_REJECTED } from './lib/app-probe.mjs'
 
 export const SUITE_NUMBER = 5
 export const SUITE_TITLE = 'Magic-link request failure modes (regression suite)'
@@ -814,11 +814,128 @@ export async function runInvalidKeyProbe(report, baseUrl, runId, readStderr) {
 }
 
 /* ==================================================================== *
+ * 5.7 — THE httpOnly MEASUREMENT THAT IS OWED
+ * ==================================================================== */
+
+/**
+ * ------------------------------------------------------------------------------------
+ * WHY THIS EXISTS, AND WHAT IT IS PAYING OFF
+ * ------------------------------------------------------------------------------------
+ * `lib/supabase/server.ts` and `lib/supabase/middleware.ts` set `httpOnly: true` on the
+ * Supabase auth cookie, overriding @supabase/ssr's documented default of `false`. The security
+ * finding that asked for it also asked that it be verified BY EXERCISING SIGN-IN THROUGH THE
+ * SSR FLOW rather than by reasoning about it.
+ *
+ * That exercise is not executable at build stage: local verification runs against bare
+ * Postgres with a SQL shim, there is no local GoTrue, and the hosted project is off limits to
+ * every stage before this one. So the measurement was SCHEDULED here rather than claimed.
+ * These two assertions are it. If they report NOT EXECUTED, the measurement STILL has not been
+ * taken and must not be written up as though it had.
+ *
+ * 5.7a is the safety half: httpOnly must not break the server-side session round-trip. It
+ * cannot, in principle — `getAll()` reads the inbound Cookie header and httpOnly governs only
+ * JavaScript access in a browser — but "in principle" is what this suite exists to replace.
+ * 5.7b is the assertion proper.
+ */
+export const COOKIE_FLAG_IDS = ['5.7a', '5.7b']
+export const COOKIE_FLAG_DESCRIPTIONS = {
+  '5.7a': 'the SSR session round-trip still works with httpOnly cookies (rep session is accepted)',
+  '5.7b': 'every sb-* Set-Cookie the app emits carries HttpOnly',
+}
+
+export async function runCookieFlagChecks(report, baseUrl, app) {
+  if (!baseUrl) {
+    notExecutedAll(report, COOKIE_FLAG_IDS, COOKIE_FLAG_DESCRIPTIONS, NOT_EXECUTED_NO_BASE_URL)
+    return
+  }
+  if (!app || !app.usable || !app.cookie) {
+    notExecutedAll(
+      report,
+      COOKIE_FLAG_IDS,
+      COOKIE_FLAG_DESCRIPTIONS,
+      app?.reason ?? NOT_EXECUTED_COOKIE_REJECTED,
+    )
+    return
+  }
+
+  let res
+  try {
+    res = await fetch(`${baseUrl.replace(/\/+$/, '')}/`, {
+      headers: { cookie: app.cookie },
+      redirect: 'manual',
+    })
+  } catch (err) {
+    notExecutedAll(
+      report,
+      COOKIE_FLAG_IDS,
+      COOKIE_FLAG_DESCRIPTIONS,
+      `NOT EXECUTED — the app at PORTAL_BASE_URL was unreachable: ${err?.message ?? String(err)}`,
+    )
+    return
+  }
+
+  const location = res.headers.get('location')
+  const isLoginRedirect = (() => {
+    if (res.status < 300 || res.status >= 400 || !location) return false
+    try {
+      return new URL(location, baseUrl).pathname === '/login'
+    } catch {
+      return String(location).includes('/login')
+    }
+  })()
+
+  report.check(
+    '5.7a',
+    COOKIE_FLAG_DESCRIPTIONS['5.7a'],
+    !isLoginRedirect && res.status < 500,
+    `GET / with the minted rep session answered HTTP ${res.status}` +
+      `${location ? ` -> ${location}` : ''}. A redirect to /login would mean the app stopped ` +
+      `accepting its own cookie once httpOnly was set — which is the regression this assertion ` +
+      `exists to catch. httpOnly governs JavaScript access in a browser and never the inbound ` +
+      `Cookie header a server reads.`,
+  )
+
+  // Values are NEVER printed. Only the attribute list after the first `;`.
+  const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : []
+  const authCookies = setCookies.filter((c) => c.startsWith('sb-'))
+  const attrsOf = (c) => {
+    const [nameValue, ...attrs] = c.split(';')
+    return `${nameValue.split('=')[0]}=<redacted>; ${attrs.map((a) => a.trim()).join('; ')}`
+  }
+  const missing = authCookies.filter((c) => !/;\s*httponly/i.test(c))
+
+  if (authCookies.length === 0) {
+    // No Set-Cookie means no session write happened on this request — usually because the
+    // token had not aged into its refresh window. There is nothing to assert ON, and asserting
+    // over an empty list would pass vacuously. That is an absence of evidence and is reported
+    // as one.
+    report.notExecuted(
+      '5.7b',
+      COOKIE_FLAG_DESCRIPTIONS['5.7b'],
+      'NOT EXECUTED — the response carried no sb-* Set-Cookie header, so there was no cookie ' +
+        'write to inspect. @supabase/ssr only writes on a token refresh, so a freshly minted ' +
+        'session usually produces none. Re-run once the minted session has aged into its ' +
+        'refresh window. An empty list would pass vacuously and is reported as not run instead.',
+    )
+    return
+  }
+
+  report.check(
+    '5.7b',
+    COOKIE_FLAG_DESCRIPTIONS['5.7b'],
+    missing.length === 0,
+    `observed ${authCookies.length} sb-* Set-Cookie header(s): ` +
+      `${JSON.stringify(authCookies.map(attrsOf))}. Missing HttpOnly on: ` +
+      `${JSON.stringify(missing.map(attrsOf))}. Cookie VALUES are never printed.`,
+  )
+}
+
+/* ==================================================================== *
  * The suite, as run by `npm run verify`
  * ==================================================================== */
 
 export default async function suite5(ctx) {
-  const { cfg } = ctx
+  const { cfg, app } = ctx
   const report = new Report(SUITE_NUMBER, SUITE_TITLE, METHOD)
   const runId = newRunId()
 
@@ -829,6 +946,7 @@ export default async function suite5(ctx) {
   await probeHostedErrorShape(report, cfg, compiled, runId)
   await runRenderChecks(report, cfg.portalBaseUrl)
   await runEnumerationEquivalence(report, cfg.portalBaseUrl, runId)
+  await runCookieFlagChecks(report, cfg.portalBaseUrl, app)
 
   // Never booted by the default run. Opt in with `npm run verify:login-failure`.
   for (const id of INVALID_KEY_IDS) {

@@ -199,6 +199,15 @@ export const MANIFEST = [
   { id: '5.4d',      suite: 5, hosted: 'conditional',   local: 'absent' },
   { id: '5.5a',      suite: 5, hosted: 'not-executed',  local: 'absent', optIn: 'verify:login-failure' },
   { id: '5.5b',      suite: 5, hosted: 'not-executed',  local: 'absent', optIn: 'verify:login-failure' },
+
+  // 5.7 — the httpOnly measurement that the 2026-08-19 security pass OWES. httpOnly:true was
+  // set on code evidence (zero importers of lib/supabase/client.ts, zero document.cookie) plus
+  // a local mechanical probe; the behavioural SSR sign-in exercise the finding asked for was
+  // not executable at build stage — no local auth server, hosted project off limits — so it
+  // was scheduled here rather than claimed. NOT EXECUTED here means the measurement STILL has
+  // not been taken.
+  { id: '5.7a',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.7b',      suite: 5, hosted: 'conditional',   local: 'absent' },
 ]
 
 /** The four required attacks. Suite 5 is a regression suite and is counted separately. */
