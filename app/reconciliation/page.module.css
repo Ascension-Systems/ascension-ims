@@ -215,6 +215,45 @@
   max-width: 52ch;
 }
 
+/* Status badges for a rep's own commitments. State is carried by the WORD and, for the settled
+   case, a check glyph -- not by colour alone -- so it survives greyscale and colourblindness.
+   The outline vs filled treatment is the second, non-colour channel. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-3);
+  border: var(--border-width) solid var(--mark);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--mark);
+  white-space: nowrap;
+}
+
+.badgeSettled {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+
+/* A quiet divider heading between the active holds and the confirmed history. */
+.sectionLabel {
+  margin: var(--space-6) var(--space-4) var(--space-2);
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Confirmed rows are history, not the working set: dropped in emphasis so the active holds
+   read first. */
+.itemSettled {
+  opacity: 0.72;
+}
+
 @media (min-width: 700px) {
   .main {
     max-width: 780px;

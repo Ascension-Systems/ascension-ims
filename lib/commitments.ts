@@ -47,6 +47,42 @@ export async function getPendingCommitments(): Promise<{
   return { rows: (data ?? []) as CommitmentRow[], error: null }
 }
 
+/**
+ * The signed-in rep's OWN commitments — pending first (still holding stock), then those the
+ * source has since confirmed. Newest first: this is the rep's own activity log, and the thing
+ * they just did belongs at the top.
+ *
+ * rep_id is pinned to auth.uid() explicitly, not left to RLS alone. Policy
+ * `commitments_select_own_or_admin` also lets an ADMIN read everyone's rows, so without this
+ * filter an admin opening "My commitments" would see the whole company's book. The filter makes
+ * the page mean the same thing for every viewer: mine.
+ */
+export async function getMyCommitments(): Promise<{
+  pending: CommitmentRow[]
+  settled: CommitmentRow[]
+  error: string | null
+}> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { pending: [], settled: [], error: 'not-signed-in' }
+
+  const { data, error } = await supabase
+    .from('commitments')
+    .select('id, sku, location, qty, rep_id, state, note, source_ref, created_at, confirmed_at')
+    .eq('rep_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) return { pending: [], settled: [], error: error.message }
+  const rows = (data ?? []) as CommitmentRow[]
+  return {
+    pending: rows.filter((r) => r.state === 'pending'),
+    settled: rows.filter((r) => r.state !== 'pending'),
+    error: null,
+  }
+}
+
 /** Product names for the SKUs in a commitment list, so the queue is readable. */
 export async function namesForSkus(skus: string[]): Promise<Record<string, string>> {
   if (skus.length === 0) return {}

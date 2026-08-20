@@ -16,20 +16,21 @@ type Role = 'rep' | 'admin'
  * The active tab is filled, not just tinted: which screen you are on is carried by weight and
  * shape, not colour alone, so it survives a colourblind viewer and a greyscale screenshot.
  *
- * A rep can reach exactly one screen (Inventory), so reps get no tab strip — just the name and
- * sign out. Tabs appear only when there is somewhere to switch to. The set is filtered here for
+ * Each role sees only the screens it uses: a rep gets Inventory and their own commitments; an
+ * admin gets Inventory, the reconciliation queue, and team access. The set is filtered here for
  * legibility only; the database is the real gate — a rep who types /reconciliation is bounced by
  * the page and would read nothing even if they weren't.
  */
-const PAGES: { href: string; label: string; adminOnly?: boolean }[] = [
-  { href: '/inventory', label: 'Inventory' },
-  { href: '/reconciliation', label: 'Reconciliation', adminOnly: true },
-  { href: '/team', label: 'Team', adminOnly: true },
+const PAGES: { href: string; label: string; roles: Role[] }[] = [
+  { href: '/inventory', label: 'Inventory', roles: ['rep', 'admin'] },
+  { href: '/my-commitments', label: 'My commitments', roles: ['rep'] },
+  { href: '/reconciliation', label: 'Reconciliation', roles: ['admin'] },
+  { href: '/team', label: 'Team', roles: ['admin'] },
 ]
 
 export function AppNav({ role }: { role: Role }) {
   const pathname = usePathname()
-  const pages = PAGES.filter((p) => role === 'admin' || !p.adminOnly)
+  const pages = PAGES.filter((p) => p.roles.includes(role))
 
   return (
     <header className={styles.bar}>
