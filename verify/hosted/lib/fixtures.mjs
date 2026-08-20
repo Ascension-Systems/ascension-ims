@@ -104,6 +104,13 @@ const INVENTORY = [
   incoming_eta: null,
   source: 'quickbooks_stub',
   source_payload: { kyv_verification_artefact: true },
+  // These two keys carry no data for a stub row (the attribution constraint only requires
+  // them NOT NULL when source = 'manual_override'). They are present, as null, so that every
+  // object in the `[...INVENTORY, OVERRIDE_ROW]` bulk insert shares an IDENTICAL key set --
+  // PostgREST rejects a mixed-shape batch with PGRST102 "All object keys must match", a
+  // constraint the local pg path does not enforce and so could never have surfaced.
+  override_note: null,
+  override_at: null,
 }))
 
 /**

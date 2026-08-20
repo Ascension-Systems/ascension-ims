@@ -357,10 +357,14 @@ export default async function attack4(ctx) {
    * 4.13 — the role guard is fail-closed WITHIN 0010, independently of
    *        the 0012 grant. STATIC on this path, and deliberately so.
    * ---------------------------------------------------------------- */
-  const syncSql = readFileSync(
+  const syncSqlRaw = readFileSync(
     join(REPO, 'supabase', 'migrations', '0010_fn_apply_inventory_sync.sql'),
     'utf8',
   )
+  // Match against CODE, not comments. 0010 documents the old fail-open form in a comment to
+  // explain why it was replaced; a raw substring match on the file trips on that comment and
+  // fails an assertion whose subject (the actual guard) is correct. Strip line comments first.
+  const syncSql = syncSqlRaw.replace(/--[^\n]*/g, '')
   const hasAdminTerm = syncSql.includes('COALESCE(public.is_admin(), false)')
   const hasServiceRoleTerm = syncSql.includes("COALESCE(auth.role(), '') = 'service_role'")
   const hasOldFailOpenForm = syncSql.includes('auth.uid() IS NOT NULL AND NOT')
