@@ -125,22 +125,33 @@ export const SUPPRESSED_CODES: ReadonlySet<string> = new Set([
  * Throttles. See the note in actions.ts about the enumeration tradeoff this branch carries.
  *
  * ------------------------------------------------------------------------------------
- * OPEN QUESTION, ESCALATED TO THE HUMAN — THIS IS THE ONE-LINE MOVE
+ * CLOSED QUESTION — KEPT AS THE RECORD OF WHY, NOT AS A LIVE ESCALATION
  * ------------------------------------------------------------------------------------
+ * This block used to be headed "OPEN QUESTION, ESCALATED TO THE HUMAN". It is not open: the
+ * ruling arrived and was applied, and the RESOLUTION immediately below is the outcome. The
+ * heading is corrected because a security comment that announces an unresolved question above
+ * code that already resolved it invites the next reader to re-open a settled decision, or to
+ * "finish" a move that has already been made. The history is worth keeping; the stale framing
+ * is not.
+ *
+ * THE LEAK THIS DESCRIBES IS FIXED. It is retained because it states WHY the current
+ * membership is what it is, and anyone proposing to move `over_email_send_rate_limit` back
+ * into this set needs to have read it:
+ *
  * `over_email_send_rate_limit` is the PER-ADDRESS throttle. With `shouldCreateUser: false`
  * the email-send path is only reached for addresses that are REGISTERED, so that code only
  * ever fires for a registered address. An attacker who submits the same address twice inside
- * the throttle window therefore gets the rate-limit page for a registered address and the
+ * the throttle window therefore got the rate-limit page for a registered address and the
  * check-email page for an unregistered one: a reliable enumeration oracle against the same
- * ~120 named reps the anti-enumeration defence exists to protect.
+ * ~120 named reps the anti-enumeration defence exists to protect. Classifying it SUPPRESSED
+ * is what removed that oracle.
  *
- * `over_request_rate_limit` is IP/route-level, address-independent, and carries no such leak.
+ * `over_request_rate_limit` is IP/route-level, address-independent, and carries no such leak,
+ * which is why it is the one member this set retains.
  *
- * Implemented here as option (a) — as instructed: both codes classify RATE_LIMITED and the
- * user is told to wait and retry. Pending a ruling, option (b) is EXACTLY ONE LINE: move
- * `'over_email_send_rate_limit'` from this set into SUPPRESSED_CODES above (and update the
- * matching row in the 5.1 table in verify/login/predicate-cases.ts). Do not make that move
- * without the ruling, and do not delete this comment while the question is open.
+ * The original instruction implemented option (a) — both codes RATE_LIMITED. Option (b) was
+ * the one-line move of `'over_email_send_rate_limit'` into SUPPRESSED_CODES, with the matching
+ * row in verify/login/predicate-cases.ts. OPTION (b) HAS BEEN TAKEN; both halves are done.
  *
  * ------------------------------------------------------------------------------------
  * RESOLUTION — 2026-08-19. THE QUESTION IS CLOSED. OPTION (b) WAS TAKEN.
