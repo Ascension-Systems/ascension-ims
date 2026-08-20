@@ -2,8 +2,23 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { supabaseAnonKey, supabaseUrl } from '@/lib/env'
 
-/** Routes reachable without a session. Everything else redirects to /login. */
-const PUBLIC_PATHS = ['/login', '/login/check-email', '/auth/callback', '/auth/auth-code-error']
+/**
+ * Routes reachable without a session. Everything else redirects to /login.
+ *
+ * `/api/health/auth` is public DELIBERATELY. The failure it exists to surface — OTP disabled
+ * project-wide, or a rotated anon key — is precisely the failure in which NOBODY can obtain a
+ * session, so an authenticated health check would be useless exactly when it is needed. It is
+ * made safe by construction instead: no input of any kind, a module-constant probe address, a
+ * closed response vocabulary, no free-text field, and a rate limiter that runs before it
+ * touches the vendor. See app/api/health/auth/route.ts.
+ */
+const PUBLIC_PATHS = [
+  '/login',
+  '/login/check-email',
+  '/auth/callback',
+  '/auth/auth-code-error',
+  '/api/health/auth',
+]
 
 const isPublic = (pathname: string) =>
   PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

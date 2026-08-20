@@ -527,6 +527,54 @@ verify/         the four attacks. verify/hosted/ targets the hosted project over
 docs/           the implementation plan this was built from
 ```
 
+### The two API routes that are not features
+
+**`app/api/commitments` is a step-1 verification surface, not a shipped feature.** No button,
+form, screen, link or placeholder anywhere in this build reaches it (D8 holds the
+commitment-recording UI). It exists because the commitments data layer ships in full so
+verification requirements 2 and 3 can be attacked server-side, which is how the brief says
+those attacks are run. As of the 2026-08-19 security pass it is authenticated, scoped to a
+**provisioned identity**, and rate-limited at 30 requests/minute per user. **Step 2 will
+formalise it** — that is when scope, response shape and limits get a proper design pass. An
+unprotected write endpoint does not ship just because no button points at it.
+
+Its scope is deliberately *not* `admin`. `record_commitment` (migration 0009) requires only a
+non-NULL `auth.uid()` and migration 0012 grants `EXECUTE` to `authenticated`; requiring admin at
+the route would contradict the database — the gate that actually matters — and would break the
+rep-session attack surface the harness depends on.
+
+**`GET /api/health/auth` is the server-side configuration health signal.** It exists because
+`app/login/auth-error.ts` classifies `otp_disabled` and `over_email_send_rate_limit` as
+SUPPRESSED, so a project where nobody can sign in answers every rep with the same "check your
+email" page a healthy one does. That is correct for the user and hides a real outage; this
+endpoint reports it from the server, with no address and no session.
+
+It takes **no input of any kind** — no body, no query parameters. The probe address is a module
+constant in the reserved `.invalid` TLD and is not configurable. It is **unauthenticated,
+deliberately**: the failure it detects is exactly the failure in which nobody can obtain a
+session, so an authenticated health check would be useless when it is needed. It is made safe by
+construction — closed value vocabulary, no free-text field, no key material, and a rate limiter
+(6 requests/minute per IP) that runs *before* it touches Supabase.
+
+The response is always HTTP 200 with exactly five keys: `checkedAt`, `authEndpointReachable`,
+`anonKeyAccepted`, `otpEnabled`, `verdict`.
+
+| `verdict` | What it means | What to do |
+|---|---|---|
+| `broken` | a fault was positively identified: the endpoint is unreachable, the anon key is rejected, the vendor is returning 5xx, or OTP is disabled project-wide | read `authEndpointReachable`, `anonKeyAccepted` and `otpEnabled` to see which, then fix the configuration or wait out the vendor incident |
+| `no_fault_detected` | the probe completed and found nothing wrong | nothing. Note the wording |
+| `unmeasured` | the probe could not reach a conclusion: configuration is missing, the request was throttled, or the response shape was unrecognised | re-run; if it persists, the environment variables are probably unset |
+
+**`verdict` is not called `ok`, deliberately.** `otpEnabled` can never be proven, so "ok" would
+be the same class of false-healthy claim this security pass exists to remove.
+
+**`otpEnabled` can read `"no"` or `"unknown"` and can never read `"yes"`.** The probe is
+one-sided: if GoTrue answers `otp_disabled` for a constant address that can never be registered,
+OTP is off project-wide and that is conclusive. Any other answer is inconclusive, because
+`otp_disabled` may be masked by `user_not_found` and because this project's own
+unknown-address behaviour is itself unmeasured. A `"yes"` would be a claim nothing supports.
+Assertion `5.6g` records what a hosted run actually observed.
+
 A few decisions worth knowing before changing anything:
 
 - **`commitments` has a SELECT policy and no INSERT/UPDATE/DELETE policy, for any role,

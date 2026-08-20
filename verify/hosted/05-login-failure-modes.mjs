@@ -814,6 +814,222 @@ export async function runInvalidKeyProbe(report, baseUrl, runId, readStderr) {
 }
 
 /* ==================================================================== *
+ * 5.6 — THE CONFIGURATION HEALTH SIGNAL
+ * ==================================================================== */
+
+/**
+ * ------------------------------------------------------------------------------------
+ * WHAT THESE ASSERT, AND WHY 5.6b AND 5.6e ARE THE IMPORTANT ONES
+ * ------------------------------------------------------------------------------------
+ * `GET /api/health/auth` is the cost of the 2026-08-19 ruling, paid rather than absorbed: with
+ * `otp_disabled` and `over_email_send_rate_limit` classified SUPPRESSED, a project in which
+ * nobody can sign in looks healthy to every rep. This endpoint reports that from the server.
+ *
+ * It is UNAUTHENTICATED by construction (an authenticated health check is useless in the exact
+ * failure it detects), so the assertions that matter most are the anti-leak ones:
+ *
+ *   5.6b  the body carries EXACTLY the five declared keys. ANY EXTRA KEY FAILS. A health
+ *         endpoint grows a `detail` or `message` field the moment someone is debugging, and
+ *         free text is how a key, an address or a vendor message gets out of one.
+ *   5.6e  the RAW response text contains no '@' and nothing JWT-shaped.
+ *
+ * 5.6d states the one-sidedness as an assertion rather than as a comment: `otpEnabled` can
+ * prove "no" and can never prove "yes".
+ */
+export const HEALTH_SIGNAL_IDS = ['5.6a', '5.6b', '5.6c', '5.6d', '5.6e', '5.6f', '5.6g', '5.6h']
+export const HEALTH_SIGNAL_DESCRIPTIONS = {
+  '5.6a': 'GET /api/health/auth answers 200 with a JSON content-type',
+  '5.6b': 'the body carries EXACTLY the five declared keys and no others',
+  '5.6c': 'every value is inside its declared closed set',
+  '5.6d': 'otpEnabled is never "yes" (the probe is one-sided by construction)',
+  '5.6e': 'the response carries no key material and no address',
+  '5.6f': 'POST /api/health/auth is refused with 405 and Allow: GET',
+  '5.6g': 'the otp_disabled measurement is recorded verbatim in the run notes',
+  '5.6h': 'the rate limiter fires',
+}
+
+const DECLARED_HEALTH_KEYS = [
+  'anonKeyAccepted',
+  'authEndpointReachable',
+  'checkedAt',
+  'otpEnabled',
+  'verdict',
+]
+const TRI = new Set(['yes', 'no', 'unknown'])
+const VERDICTS = new Set(['broken', 'no_fault_detected', 'unmeasured'])
+
+export async function runHealthSignalChecks(report, baseUrl) {
+  if (!baseUrl) {
+    notExecutedAll(report, HEALTH_SIGNAL_IDS, HEALTH_SIGNAL_DESCRIPTIONS, NOT_EXECUTED_NO_BASE_URL)
+    return
+  }
+
+  const base = baseUrl.replace(/\/+$/, '')
+
+  let res
+  let raw
+  try {
+    res = await fetch(`${base}/api/health/auth`, { redirect: 'manual' })
+    raw = await res.text()
+  } catch (err) {
+    notExecutedAll(
+      report,
+      HEALTH_SIGNAL_IDS,
+      HEALTH_SIGNAL_DESCRIPTIONS,
+      `NOT EXECUTED — the app at PORTAL_BASE_URL was unreachable: ${err?.message ?? String(err)}`,
+    )
+    return
+  }
+
+  const contentType = res.headers.get('content-type') ?? ''
+  report.check(
+    '5.6a',
+    HEALTH_SIGNAL_DESCRIPTIONS['5.6a'],
+    res.status === 200 && contentType.includes('application/json'),
+    `HTTP ${res.status}, content-type ${JSON.stringify(contentType)}`,
+  )
+
+  let parsed = null
+  let parseError = null
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    parseError = err?.message ?? String(err)
+  }
+
+  if (parsed === null || typeof parsed !== 'object') {
+    const reason =
+      'NOT EXECUTED — the response body was not a JSON object' +
+      `${parseError ? `: ${parseError}` : ''}. There was nothing to inspect.`
+    for (const id of ['5.6b', '5.6c', '5.6d']) {
+      report.notExecuted(id, HEALTH_SIGNAL_DESCRIPTIONS[id], reason)
+    }
+  } else {
+    const keys = Object.keys(parsed).sort()
+    report.check(
+      '5.6b',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6b'],
+      keys.length === DECLARED_HEALTH_KEYS.length &&
+        keys.every((k, i) => k === DECLARED_HEALTH_KEYS[i]),
+      `expected ${JSON.stringify(DECLARED_HEALTH_KEYS)}, observed ${JSON.stringify(keys)}. ` +
+        `An EXTRA KEY IS A FAILURE, not a nicety: this endpoint is unauthenticated and its ` +
+        `safety rests on having no free-text field for a key, an address or a vendor message ` +
+        `to leak through.`,
+    )
+
+    const checkedAtOk =
+      typeof parsed.checkedAt === 'string' && !Number.isNaN(Date.parse(parsed.checkedAt))
+    report.check(
+      '5.6c',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6c'],
+      TRI.has(parsed.authEndpointReachable) &&
+        TRI.has(parsed.anonKeyAccepted) &&
+        TRI.has(parsed.otpEnabled) &&
+        VERDICTS.has(parsed.verdict) &&
+        checkedAtOk,
+      `authEndpointReachable=${JSON.stringify(parsed.authEndpointReachable)} ` +
+        `anonKeyAccepted=${JSON.stringify(parsed.anonKeyAccepted)} ` +
+        `otpEnabled=${JSON.stringify(parsed.otpEnabled)} ` +
+        `verdict=${JSON.stringify(parsed.verdict)} checkedAt parses=${checkedAtOk}`,
+    )
+
+    report.check(
+      '5.6d',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6d'],
+      parsed.otpEnabled !== 'yes',
+      `observed otpEnabled=${JSON.stringify(parsed.otpEnabled)}. The probe can prove OTP is ` +
+        `DISABLED and can never prove it is enabled; a "yes" would mean someone widened the ` +
+        `union without a measurement.`,
+    )
+  }
+
+  const hasAt = raw.includes('@')
+  const hasJwtShape = /eyJ[A-Za-z0-9_-]{10,}/.test(raw)
+  report.check(
+    '5.6e',
+    HEALTH_SIGNAL_DESCRIPTIONS['5.6e'],
+    !hasAt && !hasJwtShape,
+    `the raw response text contains '@': ${hasAt}; contains a JWT-shaped string: ${hasJwtShape}. ` +
+      `The response body is ${raw.length} characters. Neither the probe address nor any key ` +
+      `may appear in it.`,
+  )
+
+  let postRes = null
+  try {
+    postRes = await fetch(`${base}/api/health/auth`, { method: 'POST', redirect: 'manual' })
+  } catch (err) {
+    report.notExecuted(
+      '5.6f',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6f'],
+      `NOT EXECUTED — the POST could not be issued: ${err?.message ?? String(err)}`,
+    )
+  }
+  if (postRes) {
+    const allow = postRes.headers.get('allow')
+    report.check(
+      '5.6f',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6f'],
+      postRes.status === 405 && allow === 'GET',
+      `HTTP ${postRes.status}, Allow: ${JSON.stringify(allow)}`,
+    )
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 5.6g — THE MEASUREMENT BEHIND THE otp_disabled CLASSIFICATION.
+   * ---------------------------------------------------------------- */
+  const observedOtp = parsed && typeof parsed === 'object' ? parsed.otpEnabled : undefined
+  const observedVerdict = parsed && typeof parsed === 'object' ? parsed.verdict : undefined
+  report.check(
+    '5.6g',
+    HEALTH_SIGNAL_DESCRIPTIONS['5.6g'],
+    observedVerdict !== undefined && observedVerdict !== 'unmeasured',
+    `the probe reached no conclusion: verdict=${JSON.stringify(observedVerdict)}. ` +
+      `"unmeasured" means the run cannot settle the otp_disabled question either way.`,
+  )
+  report.notes.push(
+    `5.6g: GET /api/health/auth observed otpEnabled=${JSON.stringify(observedOtp)}, ` +
+      `verdict=${JSON.stringify(observedVerdict)}. This is the measurement behind the ` +
+      `otp_disabled classification in app/login/auth-error.ts. Read it before revisiting that ` +
+      `row.`,
+  )
+
+  /* ---------------------------------------------------------------- *
+   * 5.6h — the limiter. MUST RUN LAST: it deliberately exhausts the
+   *        window, so anything after it would be answered 429.
+   * ---------------------------------------------------------------- */
+  let limited = null
+  let retryAfter = null
+  try {
+    for (let i = 0; i < 10; i++) {
+      const r = await fetch(`${base}/api/health/auth`, { redirect: 'manual' })
+      await r.text()
+      if (r.status === 429) {
+        limited = r.status
+        retryAfter = r.headers.get('retry-after')
+        break
+      }
+    }
+  } catch (err) {
+    report.notExecuted(
+      '5.6h',
+      HEALTH_SIGNAL_DESCRIPTIONS['5.6h'],
+      `NOT EXECUTED — the app became unreachable during the burst: ${err?.message ?? String(err)}`,
+    )
+    return
+  }
+  report.check(
+    '5.6h',
+    HEALTH_SIGNAL_DESCRIPTIONS['5.6h'],
+    limited === 429 && retryAfter !== null,
+    `after up to 10 sequential GETs the limiter ${limited === 429 ? 'fired' : 'did not fire'} ` +
+      `(status ${JSON.stringify(limited)}, Retry-After ${JSON.stringify(retryAfter)}). ` +
+      `THIS EVIDENCES IN-PROCESS BEHAVIOUR ON A SINGLE INSTANCE ONLY. The limiter is a ` +
+      `module-level Map; on a multi-instance deployment the effective global limit is ` +
+      `(instances x limit) and a cold start resets it. See lib/rate-limit.ts.`,
+  )
+}
+
+/* ==================================================================== *
  * 5.7 — THE httpOnly MEASUREMENT THAT IS OWED
  * ==================================================================== */
 
@@ -946,6 +1162,7 @@ export default async function suite5(ctx) {
   await probeHostedErrorShape(report, cfg, compiled, runId)
   await runRenderChecks(report, cfg.portalBaseUrl)
   await runEnumerationEquivalence(report, cfg.portalBaseUrl, runId)
+  await runHealthSignalChecks(report, cfg.portalBaseUrl)
   await runCookieFlagChecks(report, cfg.portalBaseUrl, app)
 
   // Never booted by the default run. Opt in with `npm run verify:login-failure`.

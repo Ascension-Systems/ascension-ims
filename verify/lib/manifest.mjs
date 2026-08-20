@@ -200,6 +200,18 @@ export const MANIFEST = [
   { id: '5.5a',      suite: 5, hosted: 'not-executed',  local: 'absent', optIn: 'verify:login-failure' },
   { id: '5.5b',      suite: 5, hosted: 'not-executed',  local: 'absent', optIn: 'verify:login-failure' },
 
+  // 5.6 — the configuration health signal, GET /api/health/auth. The cost of the 2026-08-19
+  // ruling, paid rather than absorbed. NO alsoRuns: verify:login-predicate — checkSubsetDrift
+  // would then demand that runner emit these ids, and it cannot; it has no app to talk to.
+  { id: '5.6a',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6b',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6c',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6d',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6e',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6f',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6g',      suite: 5, hosted: 'conditional',   local: 'absent' },
+  { id: '5.6h',      suite: 5, hosted: 'conditional',   local: 'absent' },
+
   // 5.7 — the httpOnly measurement that the 2026-08-19 security pass OWES. httpOnly:true was
   // set on code evidence (zero importers of lib/supabase/client.ts, zero document.cookie) plus
   // a local mechanical probe; the behavioural SSR sign-in exercise the finding asked for was

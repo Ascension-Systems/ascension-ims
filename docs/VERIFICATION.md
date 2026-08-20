@@ -566,6 +566,64 @@ per-address email throttle fires (5.4b sends a real magic link to a non-routable
 consumes that address's throttle), 5.4 reports `NOT EXECUTED — re-run after the throttle
 window` rather than failing.
 
+### The configuration health signal — `5.6a`–`5.6h`
+
+`GET /api/health/auth` (`app/api/health/auth/route.ts`) is **the cost of the 2026-08-19 ruling,
+paid rather than absorbed.** With `otp_disabled` and `over_email_send_rate_limit` classified
+`SUPPRESSED`, a project in which nobody can sign in answers every rep with the same
+"check your email" page a healthy project answers. That is the right user-facing behaviour and it
+re-hides a real outage. This endpoint reports the same conditions from the server side, with no
+address, no session and no user input.
+
+**It can prove "OTP is disabled" and can never prove "OTP is enabled."** A constant address in
+the reserved `.invalid` TLD is submitted with `shouldCreateUser: false`. If GoTrue answers
+`otp_disabled` for an address that can never be registered, OTP is off project-wide and that is
+conclusive and address-independent. Any other answer is inconclusive. So `otpEnabled` has exactly
+two values in its type — `"no"` and `"unknown"` — and `"yes"` is deliberately absent from the
+union. `5.6d` asserts that absence rather than trusting a comment to preserve it.
+
+**It is unauthenticated, deliberately**, because the failure it detects is exactly the failure in
+which nobody can obtain a session. Safety is structural instead: no input of any kind, a
+module-constant probe address, a closed value vocabulary, no free-text field on the 200 response,
+and a rate limiter that runs before the vendor is touched. It does **not** call
+`classifyAuthError` — that predicate answers "what may the user be told", and since the ruling it
+classifies a disabled project as `SUPPRESSED`, so reading it here would report an outage as
+healthy. Different question, different mapping, branching on `status` and `code` only.
+
+| id | Asserts |
+|---|---|
+| `5.6a` | 200 with a JSON content-type |
+| `5.6b` | **exactly** the five declared keys — `checkedAt`, `authEndpointReachable`, `anonKeyAccepted`, `otpEnabled`, `verdict`. **Any extra key FAILS.** This is the anti-leak assertion: a health endpoint grows a `detail` field the moment someone is debugging, and free text is how a key or an address gets out of one |
+| `5.6c` | every value is inside its declared closed set, and `checkedAt` parses as a date |
+| `5.6d` | `otpEnabled` is never `"yes"` |
+| `5.6e` | the **raw response text** contains no `@` and nothing JWT-shaped |
+| `5.6f` | `POST` is refused with `405` and `Allow: GET` |
+| `5.6g` | **the measurement.** Records the observed `otpEnabled` and `verdict` verbatim in the run notes. This is the evidence that settles the `otp_disabled` classification in `app/login/auth-error.ts` — read it before revisiting that row |
+| `5.6h` | the rate limiter fires within 10 sequential GETs and carries `Retry-After`. **Evidences in-process behaviour on a single instance only** — the limiter is a module-level `Map`, so on a multi-instance deployment the effective global limit is (instances × limit) and a cold start resets it. Runs last, because it deliberately exhausts the window |
+
+All eight are `hosted: conditional` on `PORTAL_BASE_URL` and `local: absent`.
+
+### `5.7a` / `5.7b` — the httpOnly measurement that is owed
+
+`lib/supabase/server.ts` and `lib/supabase/middleware.ts` set `httpOnly: true` on the Supabase
+auth cookie, overriding `@supabase/ssr`'s documented default of `false`. The finding that asked
+for it also asked that it be verified **by exercising sign-in through the SSR flow**, not by
+reasoning about it.
+
+**That exercise was not executable at build stage** — local verification runs against bare
+Postgres with a SQL shim, there is no local GoTrue and no auth server of any kind, and the hosted
+project was off limits to every stage before this one. So the measurement was **scheduled here
+rather than claimed**. `5.7a` asserts the SSR session round-trip still works with `httpOnly`
+cookies (a `GET /` with the minted rep session must not be answered with a `/login` redirect);
+`5.7b` asserts every `sb-*` `Set-Cookie` carries `HttpOnly`. Cookie **values are never printed**,
+only the attribute list.
+
+**A `NOT EXECUTED` on 5.7 means the measurement still has not been taken**, and must not be
+written up as though it had. `5.7b` reports `NOT EXECUTED` rather than passing when the response
+carries no `sb-*` `Set-Cookie` at all — `@supabase/ssr` only writes on a token refresh, so a
+freshly minted session usually produces none, and asserting over an empty list would pass
+vacuously.
+
 ---
 
 ## 8. Output contract
@@ -671,23 +729,23 @@ the code can count appears in the prose of docs/VERIFICATION.md.
 
   REGRESSION SUITE 5 — magic-link request failure modes
 
-    Total distinct assertion ids .................................. 37
-    Executable remotely  (npm run verify) ......................... 30
-      of which conditional on a precondition ...................... 13
+    Total distinct assertion ids .................................. 45
+    Executable remotely  (npm run verify) ......................... 38
+      of which conditional on a precondition ...................... 21
     STATIC — asserts the migration source, not deployed ........... 5
     NOT EXECUTED on the hosted path ............................... 2
 
     Executes live ONLY under npm run verify:local ................. 0
-    Executes live ONLY under npm run verify ....................... 30
+    Executes live ONLY under npm run verify ....................... 38
     Executes live on BOTH paths ................................... 0
     Executes live on NEITHER path ................................. 7
 
-    0 + 0 + 30 + 7 = 37 (declared total 37)
+    0 + 0 + 38 + 7 = 45 (declared total 45)
 
     Remote-only :
       5.1.1, 5.1.2, 5.1.3, 5.1.4, 5.1.5, 5.1.6, 5.1.7, 5.1.8, 5.1.9, 5.1.10, 5.1.11, 5.1.12,
       5.1.13, 5.1.14, 5.1.15, 5.1.16, 5.1.17, 5.2a, 5.2b, 5.2c, 5.3a, 5.3b, 5.3c, 5.3d, 5.4a,
-      5.4b, 5.4c, 5.4d, 5.7a, 5.7b
+      5.4b, 5.4c, 5.4d, 5.6a, 5.6b, 5.6c, 5.6d, 5.6e, 5.6f, 5.6g, 5.6h, 5.7a, 5.7b
     Neither     :
       5.C1, 5.C2, 5.C3, 5.C4, 5.C5, 5.5a, 5.5b
     Also run by `npm run verify:login-predicate` (22 ids):
@@ -697,7 +755,7 @@ the code can count appears in the prose of docs/VERIFICATION.md.
     Opt-in      : 5.5b executes under `npm run verify:login-failure`
 
     Per suite (hosted / local, executable live or conditional):
-      suite 5: 37 ids — hosted 30 executable, 5 STATIC, 2 NOT EXECUTED | local 0 executable, 37 absent
+      suite 5: 45 ids — hosted 38 executable, 5 STATIC, 2 NOT EXECUTED | local 0 executable, 45 absent
 
   READ "executable remotely" AS A MAXIMUM, NOT A PROMISE. It counts the conditional
   assertions as executable, and each of those has a precondition that can fail to hold:
