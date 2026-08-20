@@ -28,7 +28,12 @@ export function stubInventorySource(): InventorySource {
       const admin = createAdminClient()
       const { data, error } = await admin
         .from('inventory')
-        .select('sku, location, qty_on_hand, qty_committed, qty_incoming, incoming_eta, source, source_payload')
+        // source_payload is DELIBERATELY NOT SELECTED. Reading it back and returning it
+        // made every sync nest the previous payload inside the new one -- measured growing
+        // 387 -> 556 -> 725 bytes across three syncs on a single row, one nesting level
+        // each time, with no pruning anywhere. A real integration returns the SOURCE's
+        // payload; it never echoes back what we last stored. The stub now matches that.
+        .select('sku, location, qty_on_hand, qty_committed, qty_incoming, incoming_eta, source')
         .order('sku')
 
       if (error) {
@@ -44,7 +49,8 @@ export function stubInventorySource(): InventorySource {
         incoming_eta: (row.incoming_eta as string | null) ?? null,
         // An override row keeps its own source. Everything else is stub-sourced, and says so.
         source: row.source === 'manual_override' ? 'manual_override' : 'quickbooks_stub',
-        source_payload: (row.source_payload as Record<string, unknown> | null) ?? null,
+        // Null, not the previous payload. See the note on the select above.
+        source_payload: null,
       }))
     },
   }
