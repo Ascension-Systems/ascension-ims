@@ -38,15 +38,32 @@ export type PostgresErrorLike = {
   hint?: string | null
 }
 
+const INTERNAL: Mapping = {
+  status: 500,
+  error: 'INTERNAL',
+  message: 'Something went wrong. Please try again.',
+}
+
+/**
+ * `Object.hasOwn` rather than a bare `MAP[code]`, deliberately.
+ *
+ * A plain index into an object literal also resolves inherited keys, so `code` values of
+ * `constructor`, `toString`, `valueOf`, `hasOwnProperty` or `__proto__` return a truthy
+ * non-Mapping from Object.prototype instead of falling through to INTERNAL. The `?? {...}`
+ * fallback does not catch that: the value is not null or undefined, it is a function. The
+ * caller would then read `.status` and `.error` off it, get undefined for both, and hand
+ * undefined to NextResponse.json(body, { status: undefined }).
+ *
+ * NOT REACHABLE TODAY: `code` is a PostgreSQL SQLSTATE arriving via PostgrestError, and
+ * SQLSTATEs are five alphanumeric characters, so none of those strings can appear. This is
+ * closed because the guarantee is a property of the CALLER (that nothing attacker-influenced
+ * ever reaches this argument), the function itself cannot enforce it, and a lookup table
+ * indexed by an outside value is a pattern a review flags on sight. One line to make the
+ * fallback actually total.
+ */
 export function mapPostgresError(error: PostgresErrorLike | null | undefined): Mapping {
   const code = error?.code ?? ''
-  return (
-    MAP[code] ?? {
-      status: 500,
-      error: 'INTERNAL',
-      message: 'Something went wrong. Please try again.',
-    }
-  )
+  return Object.hasOwn(MAP, code) ? MAP[code]! : INTERNAL
 }
 
 /**
