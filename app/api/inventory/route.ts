@@ -55,6 +55,14 @@ export async function PATCH(request: Request) {
     )
   }
 
+  const declared = Number(request.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declared) && declared > 65_536) {
+    return NextResponse.json(
+      { error: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large.' },
+      { status: 413 },
+    )
+  }
+
   let body: unknown
   try {
     body = await request.json()

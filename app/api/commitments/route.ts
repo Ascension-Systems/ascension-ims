@@ -7,12 +7,10 @@ import { checkRateLimit } from '@/lib/rate-limit'
 /**
  * POST -> record_commitment RPC.
  *
- * NO UI POINTS AT THIS. Build-order step 2 (the rep commitment-recording screen) is approved
- * in principle but HELD (D8). There is no button, form, screen, link or placeholder anywhere
- * in this run that reaches this route. It exists because the commitments DATA LAYER ships in
- * full so the two ledger-related verification requirements are attackable server-side --
- * which is exactly how the brief says those attacks are run, "by querying directly rather
- * than through the UI".
+ * REACHED BY THE UI as of build-order step 2: components/commit-form.tsx POSTs here from the
+ * expanded product card. It is ALSO the server-side attack surface for the two ledger-related
+ * verification requirements, which the brief requires be run "by querying directly rather than
+ * through the UI" -- both callers hit the same handler, so the attacks exercise the real path.
  *
  * Identity is NOT taken from the request. record_commitment has no rep_id parameter: it reads
  * auth.uid() inside the function, which is what stops a SECURITY DEFINER function from
@@ -46,30 +44,9 @@ import { checkRateLimit } from '@/lib/rate-limit'
  * database is still the real gate.
  */
 export async function POST(request: Request) {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'INVALID_INPUT', message: 'Expected a JSON body.' }, { status: 400 })
-  }
-
-  const { sku, qty, location, note } = (body ?? {}) as {
-    sku?: unknown
-    qty?: unknown
-    location?: unknown
-    note?: unknown
-  }
-
-  if (typeof sku !== 'string' || sku.length === 0) {
-    return NextResponse.json({ error: 'INVALID_INPUT', message: 'A sku is required.' }, { status: 400 })
-  }
-  if (typeof qty !== 'number' || !Number.isInteger(qty) || qty <= 0) {
-    return NextResponse.json(
-      { error: 'INVALID_INPUT', message: 'qty must be a positive integer.' },
-      { status: 400 },
-    )
-  }
-
+  // IDENTITY AND BUDGET FIRST, BODY SECOND. Parsing first meant an unbounded payload was
+  // fully deserialised for a caller who had not been identified and whose rate-limit budget
+  // was already spent — a measurable latency cost from a single authenticated session.
   const supabase = await createClient()
 
   const {
@@ -89,13 +66,47 @@ export async function POST(request: Request) {
     )
   }
 
-  // Keyed on the revalidated user id, not on an IP header. Checked after the identity is known
-  // and before the database is touched.
+  // Keyed on the revalidated user id, not on an IP header.
   const rl = checkRateLimit('commitments:post', user.id, 30, 60_000)
   if (!rl.allowed) {
     return NextResponse.json(
       { error: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.' },
       { status: 429, headers: { 'retry-after': String(rl.retryAfterSeconds) } },
+    )
+  }
+
+  // Reject an oversized body before any parsing at all.
+  const declared = Number(request.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declared) && declared > 65_536) {
+    return NextResponse.json(
+      { error: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large.' },
+      { status: 413 },
+    )
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'INVALID_INPUT', message: 'Expected a JSON body.' }, { status: 400 })
+  }
+
+  const { sku, qty, location, note } = (body ?? {}) as {
+    sku?: unknown
+    qty?: unknown
+    location?: unknown
+    note?: unknown
+  }
+
+  if (typeof sku !== 'string' || sku.length === 0) {
+    return NextResponse.json({ error: 'INVALID_INPUT', message: 'A sku is required.' }, { status: 400 })
+  }
+  // Upper bound matters: postgres int4 overflows above 2147483647 and the database's clean
+  // SQLSTATE 22003 was being downgraded to a 500 on the way out.
+  if (typeof qty !== 'number' || !Number.isInteger(qty) || qty <= 0 || qty > 1_000_000) {
+    return NextResponse.json(
+      { error: 'INVALID_INPUT', message: 'qty must be a whole number between 1 and 1,000,000.' },
+      { status: 400 },
     )
   }
 
@@ -112,10 +123,14 @@ export async function POST(request: Request) {
     if (error.code === 'KY001') {
       const parsed = parseInsufficientAvailability(error.message)
       const available = parsed?.available ?? 0
+      // STATE THE FACT, NEVER INVENT A CAUSE. KY001 means "not enough available" -- it does
+      // NOT mean another rep took it. Availability can be short simply because the source
+      // figure is lower than the request. Asserting contention unconditionally produced a
+      // message that contradicted the card two lines above it ("Committed by reps: 0").
       return NextResponse.json(
         {
           error: 'INSUFFICIENT_AVAILABILITY',
-          message: `Only ${available} available — another rep committed the last unit first.`,
+          message: `Only ${available} available.`,
           sku,
           location: typeof location === 'string' && location ? location : 'default',
           requested: parsed?.requested ?? qty,

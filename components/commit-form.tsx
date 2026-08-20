@@ -26,12 +26,16 @@ export function CommitForm({
   sku,
   location,
   available,
+  committedPortal,
   uom,
 }: {
   sku: string
   location: string
   /** The conservative availability figure — the number this commitment is checked against. */
   available: number
+  /** Rep commitments already recorded against this row. Used ONLY to decide whether the
+      refusal may mention contention — never to assert it when there are none. */
+  committedPortal: number
   uom: string
 }) {
   const router = useRouter()
@@ -42,7 +46,9 @@ export function CommitForm({
   const [done, setDone] = useState<string | null>(null)
 
   const parsed = Number(qty)
-  const qtyValid = Number.isInteger(parsed) && parsed > 0
+  // Matches the route's bound. Postgres int4 overflows above 2147483647 and a raw overflow
+  // was escaping as a 500 rather than a clean validation message.
+  const qtyValid = Number.isInteger(parsed) && parsed > 0 && parsed <= 1_000_000
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -74,16 +80,28 @@ export function CommitForm({
         return
       }
 
-      // 409 is not an error state to apologise for — it is the system working. Another rep
-      // took the stock first. Lead with the number that is actually left.
+      // A 409 is not a failure to apologise for — it is the guard working. Lead with the
+      // number that is actually left, and STATE ONLY WHAT IS TRUE: a shortfall does not
+      // imply another rep took it. The stock can simply be short. Contention is mentioned
+      // only when rep commitments genuinely exist on this row, so the message can never
+      // contradict the "Committed by reps" figure on the same card.
       const body = await res.json().catch(() => null)
       if (res.status === 409) {
         const left = typeof body?.available === 'number' ? body.available : 0
-        setError(
-          left > 0
-            ? `Only ${left} left — another rep committed some of this stock first. Adjust the quantity and try again.`
-            : 'None left — another rep committed the last of this stock first.',
-        )
+        const contested = committedPortal > 0
+        if (left > 0) {
+          setError(
+            contested
+              ? `Only ${left} available — some of this stock is already committed by reps. Adjust the quantity and try again.`
+              : `Only ${left} available. Adjust the quantity and try again.`,
+          )
+        } else {
+          setError(
+            contested
+              ? 'None available — this stock is already fully committed.'
+              : 'None available.',
+          )
+        }
       } else if (res.status === 401) {
         setError('Your session expired. Sign in again to record this.')
       } else if (res.status === 403) {
@@ -115,6 +133,7 @@ export function CommitForm({
             type="number"
             inputMode="numeric"
             min={1}
+            max={1000000}
             step={1}
             value={qty}
             onChange={(e) => setQty(e.target.value)}

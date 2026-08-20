@@ -25,11 +25,15 @@ export function SyncButton() {
       const res = await fetch('/api/sync', { method: 'POST' })
       const body = await res.json().catch(() => null)
       if (res.ok) {
-        const confirmed = body?.confirmed ?? body?.matches ?? 0
+        // Read the field /api/sync actually returns. The previous keys did not exist on the
+        // response, so this always read 0 -- correct today only by coincidence, and a
+        // landmine for whoever wires real matching.
+        const confirmed = body?.run?.commitments_confirmed ?? 0
+        const applied = body?.run?.rows_applied ?? null
         setMsg(
           confirmed > 0
             ? `Sync complete. ${confirmed} commitment${confirmed === 1 ? '' : 's'} confirmed by the source.`
-            : 'Sync complete. The source did not include any pending commitment, so none were retired.',
+            : `Sync complete.${applied !== null ? ` ${applied} row${applied === 1 ? '' : 's'} applied.` : ''} The source did not include any pending commitment, so none were retired.`,
         )
         router.refresh()
       } else {

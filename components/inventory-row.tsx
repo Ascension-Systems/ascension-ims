@@ -160,6 +160,7 @@ export function InventoryRow({
           sku={row.sku}
           location={row.location}
           available={row.qty_available}
+          committedPortal={row.qty_committed_portal}
           uom={row.uom}
         />
 
