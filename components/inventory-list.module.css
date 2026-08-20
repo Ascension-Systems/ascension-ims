@@ -80,6 +80,9 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
+    /* Without this, expanding one card stretches every card in its grid row to match,
+       inflating unrelated neighbours into tall empty rectangles. */
+    align-items: start;
   }
 }
 

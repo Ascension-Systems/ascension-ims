@@ -12,7 +12,9 @@
    so the colour-blind-safe property holds intact. (Supersedes D2's achromatic
    constraint by Human decision 2026-08-20; the not-by-colour requirement stays.)
 
-   Contrast: ink on paper ~17:1. --ink-soft on paper 7.2:1. Accent on paper 6.1:1.
+   Contrast: ink on paper ~17:1. --ink-soft 7.5:1. --ink-faint 5.7:1 (AA). Accent 6.1:1.
+   --ink-faint was #8a827a (3.6:1) and FAILED both AA and this project's own 7:1 floor;
+   the SKU rides on --ink-soft because it is the string a rep reads aloud to a customer.
    Mobile-first: every rule is written for 375x667 and widens upward.
    ========================================================================== */
 
@@ -23,7 +25,7 @@
   --surface-sunk: #f4f1ea;
   --ink: #1c1917;
   --ink-soft: #57514b;
-  --ink-faint: #8a827a;
+  --ink-faint: #6b6259;
   --line: #e8e3da;
   --line-soft: #f1ede6;
 

@@ -80,7 +80,9 @@
   font-size: var(--text-sku);
   font-weight: 500;
   letter-spacing: 0.04em;
-  color: var(--ink-faint);
+  /* The SKU is the one string a rep reads aloud to quote a customer, often on a phone in a
+     warehouse or a car park. It takes the 7:1 token, not the 5.7:1 one. */
+  color: var(--ink-soft);
 }
 
 .chevron {

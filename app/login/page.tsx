@@ -56,7 +56,7 @@ export default async function LoginPage({
             <span className={styles.noticeText}>
               {params.error === LOGIN_ERROR.RATE_LIMITED
                 ? 'Too many sign-in requests. Wait a minute, then try again.'
-                : 'We could not send your sign-in link. This is a problem on our side, not with your address. Try again in a few minutes, or contact your Ascension representative if it keeps happening.'}
+                : 'We could not send your sign-in link. This is a problem on our side, not with your address. Try again in a few minutes. If it keeps happening, contact your account manager.'}
             </span>
           </span>
         </div>
