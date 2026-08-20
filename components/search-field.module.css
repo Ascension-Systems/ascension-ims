@@ -8,9 +8,11 @@
   width: 100%;
   min-height: var(--tap-search);
   padding: 0 56px 0 var(--space-4);
-  background: var(--paper);
+  background: var(--surface);
   color: var(--ink);
-  border: var(--border-width) solid var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-card);
   font-size: var(--text-base);
   /* Suppress the WebKit search decorations so the custom clear button is the only one. */
   appearance: none;
@@ -23,7 +25,11 @@
 }
 
 .input::placeholder {
-  color: var(--gray-500);
+  color: var(--ink-faint);
+}
+
+.input:focus {
+  border-color: var(--accent);
 }
 
 /* 48x48 tap target, inside the field. */
@@ -42,10 +48,11 @@
 }
 
 .clear:active {
-  outline: var(--border-width) solid var(--ink);
+  transform: scale(0.92);
 }
 
 .clear svg {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  color: var(--ink-faint);
 }

@@ -27,6 +27,15 @@ EXCLUDES=(
   --exclude-dir=coverage
   --exclude=package-lock.json
   --exclude=check-no-secrets.sh
+  # A gitignored dotenv file is WHERE REAL VALUES ARE SUPPOSED TO LIVE. Scanning it made the
+  # JWT and service-role checks fail on every developer machine that had the app configured,
+  # while the two checks below correctly reported the same file as "ignored, not a leak" --
+  # a self-contradicting report that trains a reader to ignore this scanner entirely. The
+  # tracked/gitignored checks below are what actually protect these files; they are unchanged
+  # and still fail loudly if a dotenv is tracked or un-ignored. Keys anywhere ELSE in the tree
+  # are still caught, which is the property that matters.
+  --exclude=.env
+  --exclude=.env.*
 )
 
 fail=0

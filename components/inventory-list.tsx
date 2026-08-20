@@ -53,6 +53,12 @@ export function InventoryList({
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<SortKey>('name')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Only non-default selections count as "active" — sort always has a value, so counting it
+  // would show a permanent badge of 1 and stop meaning anything.
+  const activeFilterCount =
+    (category !== 'all' ? 1 : 0) + (status !== 'all' ? 1 : 0) + (sort !== 'name' ? 1 : 0)
 
   const staleness = useMemo(() => {
     const map = new Map<string, boolean>()
@@ -113,22 +119,43 @@ export function InventoryList({
 
   return (
     <div className={styles.wrap}>
-      {/* Sticky header keeps search and chips reachable without scrolling back up. */}
+      {/* Sticky header keeps search reachable without scrolling back up. The filter chips
+          are COLLAPSED by default: expanded, three wrapped groups fill the whole first
+          screen on a phone and push every product card below the fold, so the list a rep
+          opened the app to read is invisible until they scroll. Search is the common case;
+          filters are the occasional one, and the toggle reports how many are active so a
+          narrowed list is never mistaken for a short catalogue. */}
       <div className={styles.sticky}>
         <SearchField value={query} onChange={setQuery} />
-        <FilterBar
-          categories={categories}
-          category={category}
-          onCategory={setCategory}
-          status={status}
-          onStatus={setStatus}
-          sort={sort}
-          onSort={setSort}
-        />
-        {/* Result count, so an over-narrow filter is never mistaken for an empty catalogue. */}
-        <p className={styles.count} aria-live="polite">
-          {visible.length} of {rows.length} products
-        </p>
+        <div className={styles.controls}>
+          <button
+            type="button"
+            className={styles.filterToggle}
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="inventory-filters"
+          >
+            {filtersOpen ? 'Hide filters' : 'Filters'}
+            {activeFilterCount > 0 ? (
+              <span className={styles.filterCount}>{activeFilterCount}</span>
+            ) : null}
+          </button>
+          {/* Result count, so an over-narrow filter is never mistaken for an empty catalogue. */}
+          <p className={styles.count} aria-live="polite">
+            {visible.length} of {rows.length} products
+          </p>
+        </div>
+        <div id="inventory-filters" hidden={!filtersOpen}>
+          <FilterBar
+            categories={categories}
+            category={category}
+            onCategory={setCategory}
+            status={status}
+            onStatus={setStatus}
+            sort={sort}
+            onSort={setSort}
+          />
+        </div>
       </div>
 
       {visible.length === 0 ? (

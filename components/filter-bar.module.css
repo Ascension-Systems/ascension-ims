@@ -1,40 +1,27 @@
 .bar {
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Chips WRAP. A horizontally scrolling strip on a phone hides options behind an
+   invisible gesture and produces side-to-side scrolling inside a vertical page --
+   the filters are the primary way a rep narrows 97 SKUs, so they are all visible. */
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
 }
 
-.group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  /* Horizontally scrollable row. Chips never wrap into a second line on a phone. */
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-}
-
-.group::-webkit-scrollbar {
-  display: none;
-}
-
 .groupLabel {
+  flex: 0 0 100%;
   font-size: var(--text-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gray-700);
-  white-space: nowrap;
-  flex: 0 0 auto;
-  /* Pinned to the left edge of the scrolling row, opaque background so it stays legible as
-     chips scroll underneath. Without this a reader who scrolls right to find "Workstations"
-     or "Stale" loses the "Category" / "Status" / "Sort" caption that told them what the row
-     was for -- a real cost for someone unsure the row even *is* three separate groups. */
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--paper);
+  color: var(--ink-faint);
+  margin-bottom: 2px;
 }
 
 .chip {
@@ -42,35 +29,46 @@
   align-items: center;
   gap: var(--space-1);
   min-height: var(--tap-chip);
-  /* Generous horizontal padding carries the target area. */
   padding: 0 var(--space-4);
   flex: 0 0 auto;
-  background: var(--paper);
-  color: var(--ink);
-  border: var(--border-width) solid var(--ink);
+  background: var(--surface);
+  color: var(--ink-soft);
+  border: var(--border-width) solid var(--line);
+  border-radius: var(--radius-pill);
   font-size: var(--text-components);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 
-.chip:active {
-  border-width: 4px;
+.chip:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
 }
 
-/* Selection is encoded on THREE channels, not colour:
-     1. inverted fill
-     2. a 2px inset border (the outline, drawn inside)
-     3. the label prefixed with a check glyph */
+.chip:active {
+  transform: scale(0.97);
+}
+
+/* Selection on THREE channels, not colour alone:
+     1. filled ground (accent)
+     2. weight change to 700
+     3. a check glyph prefixed to the label */
 .chipSelected {
-  background: var(--ink);
-  color: var(--paper);
-  outline: var(--border-width) solid var(--ink);
-  outline-offset: -6px;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.chipSelected:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: #fff;
 }
 
 .chip svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }

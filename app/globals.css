@@ -1,70 +1,84 @@
 /* ==========================================================================
-   Design tokens and base styles.
+   Design tokens and base styles — "the trusted number".
 
-   PALETTE IS ACHROMATIC: white, grays and black only. No brand hue, no accent
-   colour, no logo, no company name -- not Kyrie, not Ascension, not the end
-   client. This is a deliberate decision (D2), not an oversight.
+   A stock-availability tool a furniture rep trusts enough to quote a customer.
+   Warm, confident, operations-grade. Warm paper ground, warm near-black ink,
+   and ONE accent — a deep pine green — for brand, hierarchy, and interaction.
 
-   The consequence is binding rather than optional: stock status must be
-   legible at a glance WITHOUT READING THE NUMBERS and NOT BY COLOUR ALONE --
-   and with an achromatic palette it also cannot be carried by LIGHTNESS as
-   the only channel. A status that reads only as "the darker one" fails the
-   requirement exactly the way a red/green pair would. Status is therefore
-   encoded with SHAPE, GLYPH, LABEL TEXT, FILL WEIGHT, BORDER TREATMENT and
-   POSITION -- see the .status* rules below.
+   STATUS IS STILL NOT CARRIED BY COLOUR. The four stock statuses are encoded
+   with SHAPE, GLYPH, LABEL, BORDER TREATMENT and the left RULE (position +
+   style), so the set survives the removal of colour AND lightness. The accent
+   green is used only for brand/interactive elements, NEVER to signal status,
+   so the colour-blind-safe property holds intact. (Supersedes D2's achromatic
+   constraint by Human decision 2026-08-20; the not-by-colour requirement stays.)
 
-   ACHROMATIC DOES NOT MEAN LOW CONTRAST. Body text is --ink on --paper at
-   21:1. --gray-500 is the LIGHTEST permitted text colour and only for
-   secondary text on white (5.7:1). Never gray text on a gray fill.
-
-   NO DECORATIVE ANIMATION. No CSS transitions and no keyframe animations at
-   all. Press feedback is an instantaneous :active border-width change. The
-   loading skeleton is static.
-
-   Mobile-first: every rule here is written for 375x667 and widens upward.
+   Contrast: ink on paper ~17:1. --ink-soft on paper 7.2:1. Accent on paper 6.1:1.
+   Mobile-first: every rule is written for 375x667 and widens upward.
    ========================================================================== */
 
 :root {
-  /* --- Achromatic palette. These are the ONLY colours in the build. --- */
-  --paper: #ffffff;
-  --ink: #000000;
-  --gray-900: #111111;
-  --gray-700: #3d3d3d;
-  --gray-500: #6b6b6b;
-  --gray-300: #c9c9c9;
-  --gray-100: #efefef;
+  /* --- Warm neutral ground and ink --- */
+  --paper: #fbfaf7;
+  --surface: #ffffff;
+  --surface-sunk: #f4f1ea;
+  --ink: #1c1917;
+  --ink-soft: #57514b;
+  --ink-faint: #8a827a;
+  --line: #e8e3da;
+  --line-soft: #f1ede6;
 
-  /* A texture channel, so "none available" is distinguishable without hue or
-     lightness: a hatched fill reads differently from a flat one even in a
-     grayscale photocopy or in poor light. */
-  --hatch: repeating-linear-gradient(45deg, var(--gray-300) 0 2px, transparent 2px 6px);
+  /* --- The one accent: deep pine. Brand, hierarchy, interaction. NOT status. --- */
+  --accent: #1f5c4a;
+  --accent-deep: #143f32;
+  --accent-tint: #e9f0ec;
+  --accent-line: #cfe0d8;
 
-  /* --- Type scale. Base 17px: readable at arm's length in poor light. --- */
-  --text-base: 17px;
-  --text-name: 18px;
-  --text-sku: 14px;
-  --text-figure: 28px;
-  --text-components: 14px;
-  --text-label: 13px;
+  /* Status ink — the achromatic channel that carries stock status. Kept
+     separate from --ink so status marks read as deliberate, not incidental. */
+  --mark: #211d1a;
+  --hatch: repeating-linear-gradient(45deg, var(--ink-faint) 0 1.5px, transparent 1.5px 6px);
 
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    'Helvetica Neue', sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
-    monospace;
+  /* Compatibility aliases. The palette moved from achromatic grays to the warm
+     neutral ramp above; these keep older component rules resolving to the new
+     scale rather than to undefined variables. Prefer the semantic names. */
+  --gray-900: var(--ink);
+  --gray-700: var(--ink-soft);
+  --gray-500: var(--ink-faint);
+  --gray-300: var(--line);
+  --gray-100: var(--line-soft);
 
-  /* --- Tap targets. Minimum 48x48 CSS px everywhere. --- */
+  /* --- Type. Fraunces (display/figures) + Hanken Grotesk (UI/data). --- */
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Hanken Grotesk', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-base: 16px;
+  --text-name: 17px;
+  --text-sku: 13px;
+  --text-figure: 40px;
+  --text-components: 13.5px;
+  --text-label: 12px;
+
+  /* --- Tap targets: minimum 48px. --- */
   --tap: 48px;
   --tap-chip: 44px;
-  --tap-search: 56px;
+  --tap-search: 54px;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+  --space-6: 32px;
 
   --rule-width: 4px;
-  --border-width: 2px;
+  --border-width: 1.5px;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 2px 8px rgba(28, 25, 23, 0.05);
+  --shadow-raise: 0 2px 4px rgba(28, 25, 23, 0.06), 0 8px 24px rgba(28, 25, 23, 0.08);
 }
 
 *,
@@ -83,18 +97,25 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
-  line-height: 1.45;
-  /* No overscroll bounce revealing a differently-coloured background. */
+  line-height: 1.5;
+  font-feature-settings: 'ss01' on;
+  -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
 }
 
-/* Belt and braces on the no-animation rule: nothing in this build animates,
-   and nothing added later should start without a deliberate decision. */
-*,
-*::before,
-*::after {
-  animation: none !important;
-  transition: none !important;
+/* Restrained motion: short, purposeful feedback on interactive elements only.
+   No keyframes, no decorative animation. Fully static under reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  button,
+  a,
+  input,
+  .statusBadge {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      box-shadow 120ms ease,
+      transform 120ms ease;
+  }
 }
 
 h1,
@@ -121,12 +142,12 @@ textarea {
 }
 
 a {
-  color: var(--ink);
+  color: var(--accent);
 }
 
-/* Visible focus everywhere. High contrast, not a subtle glow. */
+/* Visible focus everywhere — the accent, high-contrast. */
 :focus-visible {
-  outline: 3px solid var(--ink);
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -143,82 +164,77 @@ a {
 }
 
 /* ==========================================================================
-   STATUS ENCODING — the multi-channel treatment.
+   STATUS ENCODING — multi-channel, colour-blind-safe.
 
-   Four stock statuses. Every PAIR differs on at least three channels, so the
-   set survives the removal of colour AND lightness:
+   Every pair of statuses differs on at least three of: glyph, border style,
+   fill weight, and the left rule's position + style. Remove colour and
+   lightness and all four remain distinguishable.
 
-     status          glyph                    border   fill              left rule
-     --------------- ------------------------ -------- ----------------- ---------------------
-     IN STOCK        filled square            solid    solid black       solid, full height
-     LOW             outlined triangle        solid    white             solid, top half only
-     NONE — INCOMING down-arrow, dashed ring  dashed   white             dashed, full height
-     NONE AVAILABLE  circle with a slash      dotted   white + hatch     dotted, full height
+     status          glyph              border   fill            left rule
+     --------------- ------------------ -------- --------------- ------------------
+     IN STOCK        filled square      solid    solid mark      solid, full
+     LOW             outlined triangle  solid    outline         solid, top half
+     NONE — INCOMING arrow / dashed     dashed   outline         dashed, full
+     NONE AVAILABLE  slashed circle     dotted   outline + hatch dotted, full
 
-   LABELS ARE ALWAYS RENDERED. Never icon-only, at any breakpoint. The glyph
-   is aria-hidden; the label carries the accessible name.
+   Labels are ALWAYS rendered; the glyph is aria-hidden.
    ========================================================================== */
 
 .statusBadge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 32px;
-  padding: var(--space-1) var(--space-2);
-  border: var(--border-width) solid var(--ink);
+  min-height: 30px;
+  padding: 3px 10px 3px 8px;
+  border: var(--border-width) solid var(--mark);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--mark);
   font-size: var(--text-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .statusBadge svg {
   display: block;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
 /* IN STOCK — solid inverted fill, solid border, square glyph. */
 .statusInStock {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--mark);
+  color: var(--surface);
   border-style: solid;
 }
 
 /* LOW — outlined, solid border, triangle glyph. */
 .statusLow {
-  background: var(--paper);
-  color: var(--ink);
   border-style: solid;
 }
 
 /* NONE — INCOMING — dashed border, arrow-in-dashed-ring glyph. */
 .statusNoneIncoming {
-  background: var(--paper);
-  color: var(--ink);
   border-style: dashed;
 }
 
-/* NONE AVAILABLE — dotted border, slashed-circle glyph, hatched ground. */
+/* NONE AVAILABLE — dotted border, slashed-circle glyph, faint hatched ground. */
 .statusNone {
-  background-color: var(--paper);
-  background-image: var(--hatch);
-  color: var(--ink);
   border-style: dotted;
+  background-image: var(--hatch);
 }
 
-/* --- The left rule. A fifth channel: position and extent. --- */
+/* --- The left rule: a channel of position + style. --- */
 .ruleInStock {
-  border-left: var(--rule-width) solid var(--ink);
+  border-left: var(--rule-width) solid var(--mark);
 }
 
-/* Top half only. Rendered as a gradient so the rule genuinely stops halfway
-   rather than being a shorter element that shifts the layout. */
 .ruleLow {
   border-left: var(--rule-width) solid transparent;
-  background-image: linear-gradient(var(--ink) 0 50%, transparent 50% 100%);
+  background-image: linear-gradient(var(--mark) 0 50%, transparent 50% 100%);
   background-repeat: no-repeat;
   background-size: var(--rule-width) 100%;
   background-position: left top;
@@ -227,71 +243,54 @@ a {
 }
 
 .ruleNoneIncoming {
-  border-left: var(--rule-width) dashed var(--ink);
+  border-left: var(--rule-width) dashed var(--mark);
 }
 
 .ruleNone {
-  border-left: var(--rule-width) dotted var(--ink);
+  border-left: var(--rule-width) dotted var(--mark);
 }
 
-/* --- The availability figure carries a matching fill treatment. --- */
-.figureInStock {
-  background: var(--ink);
-  color: var(--paper);
-  padding: 0 var(--space-2);
-}
-
-.figureLow {
-  background: var(--paper);
-  color: var(--ink);
-  border: var(--border-width) solid var(--ink);
-  padding: 0 var(--space-2);
-}
-
+/* --- The availability figure: a small status tick sits beside a clean number.
+   The number itself is no longer boxed — the rule + badge carry status, so the
+   hero figure stays legible and calm. A thin underline weight varies by status
+   as a quiet fourth reinforcement on the figure itself. --- */
+.figureInStock,
+.figureLow,
 .figureNoneIncoming,
 .figureNone {
-  background-color: var(--paper);
-  background-image: var(--hatch);
   color: var(--ink);
-  border: var(--border-width) solid var(--ink);
-  padding: 0 var(--space-2);
 }
 
 /* ==========================================================================
-   FRESHNESS — orthogonal to stock status, rendered as a SECOND badge.
-
-   An item can be Low AND Stale. Collapsing those onto one scale would hide
-   one of them. The stale badge is inverted-filled with a clock glyph, which
-   is distinct from every stock badge: all of them are outlined except IN
-   STOCK, whose glyph is a square, not a clock.
+   FRESHNESS — orthogonal to stock status, a SECOND badge.
    ========================================================================== */
 
 .staleBadge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 32px;
-  padding: var(--space-1) var(--space-2);
-  background: var(--ink);
-  color: var(--paper);
-  border: var(--border-width) solid var(--ink);
+  min-height: 30px;
+  padding: 3px 10px;
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+  border: var(--border-width) solid var(--ink-faint);
+  border-radius: var(--radius-pill);
   font-size: var(--text-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .staleBadge svg {
   display: block;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
-/* A dashed outline around the ENTIRE card, so staleness is visible before the
-   badge is read. */
+/* A dashed outline around the whole card, so staleness reads before the badge. */
 .cardStale {
-  outline: var(--border-width) dashed var(--ink);
-  outline-offset: -2px;
+  outline: var(--border-width) dashed var(--ink-faint);
+  outline-offset: -3px;
 }

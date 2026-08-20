@@ -1,34 +1,55 @@
 .main {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   min-height: 100dvh;
+  padding-bottom: var(--space-6);
 }
 
+/* A quiet masthead band: the wordmark sits on the surface, the list on paper,
+   so the page has two registers instead of one flat sheet. */
 .header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: calc(var(--space-4) + env(safe-area-inset-top)) var(--space-4) 0;
+  padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) var(--space-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 .title {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--accent);
 }
 
 .subtitle {
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
   font-size: var(--text-components);
-  color: var(--gray-700);
-  max-width: 40ch;
+  color: var(--ink-soft);
+  max-width: 42ch;
 }
 
 .error {
   margin: var(--space-4);
-  padding: var(--space-3);
-  border: var(--border-width) solid var(--ink);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--line);
+  border-left: var(--rule-width) solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   font-size: var(--text-base);
+}
+
+@media (min-width: 700px) {
+  .main {
+    max-width: 780px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .title {
+    font-size: 38px;
+  }
 }

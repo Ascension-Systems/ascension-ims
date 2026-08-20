@@ -13,9 +13,12 @@
 }
 
 .heading {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--accent);
 }
 
 .body {
@@ -29,16 +32,21 @@
   justify-content: center;
   min-height: var(--tap);
   padding: 0 var(--space-4);
-  background: var(--ink);
-  color: var(--paper);
-  border: var(--border-width) solid var(--ink);
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius-pill);
   font-size: var(--text-base);
   font-weight: 600;
   text-decoration: none;
 }
 
+.action:hover {
+  background: var(--accent-deep);
+}
+
 .action:active {
-  border-width: 4px;
+  transform: scale(0.98);
 }
 
 .field {
@@ -59,32 +67,47 @@
   width: 100%;
   min-height: var(--tap-search);
   padding: 0 var(--space-4);
-  background: var(--paper);
+  background: var(--surface);
   color: var(--ink);
-  border: var(--border-width) solid var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
   font-size: var(--text-base);
   appearance: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
 }
 
 .submit {
   width: 100%;
   min-height: var(--tap);
   padding: 0 var(--space-4);
-  background: var(--ink);
-  color: var(--paper);
-  border: var(--border-width) solid var(--ink);
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius-pill);
   font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
 }
 
+.submit:hover {
+  background: var(--accent-deep);
+}
+
 .submit:active {
-  border-width: 4px;
+  transform: scale(0.98);
 }
 
 .notice {
-  padding: var(--space-3);
-  border: var(--border-width) solid var(--ink);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-left: var(--rule-width) solid var(--ink-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
   font-size: var(--text-components);
 }
 

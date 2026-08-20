@@ -6,58 +6,67 @@
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: var(--space-1);
+  gap: 0;
   text-align: right;
   /* Keeps the figure from being squeezed by a long product name. */
   flex: 0 0 auto;
-  min-width: 96px;
+  min-width: 92px;
 }
 
 .label {
-  font-size: var(--text-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gray-700);
+  color: var(--ink-faint);
   /* A long label ("AVAILABLE (QUICKBOOKS)") wraps rather than widening the column. */
-  max-width: 108px;
-  line-height: 1.2;
+  max-width: 104px;
+  line-height: 1.25;
 }
 
+/* The hero number. Fraunces at display weight -- the one place the serif carries real size,
+   because this figure is the entire product thesis: the number a rep quotes a customer. */
 .figure {
   display: inline-block;
+  font-family: var(--font-display);
   font-size: var(--text-figure);
-  font-weight: 700;
-  line-height: 1.15;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  /* Fill treatment comes from the global .figure* classes, which match the status badge. */
+  margin-top: 2px;
 }
 
 .uom {
   font-size: var(--text-label);
-  color: var(--gray-500);
+  font-weight: 600;
+  color: var(--ink-faint);
+  margin-top: 2px;
 }
 
 .lines {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .components {
   font-size: var(--text-components);
-  color: var(--gray-700);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
-/* The advisory delta line. Rendered only when qty_committed_portal > 0. With no commitments
-   recorded -- the state a fresh demo starts in -- every row shows the plain QuickBooks
-   picture, which is correct and not a bug. */
+/* The advisory delta line -- the moment the portal knows something QuickBooks doesn't.
+   This is the product's whole reason to exist, so it gets the accent. */
 .advisory {
   font-size: var(--text-components);
   font-weight: 600;
-  color: var(--ink);
-  border-left: var(--border-width) solid var(--ink);
-  padding-left: var(--space-2);
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .flag {
@@ -66,5 +75,6 @@
 
 .secondary {
   font-size: var(--text-components);
-  color: var(--gray-500);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
 }
