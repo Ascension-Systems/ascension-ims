@@ -2,7 +2,16 @@
 # Pushing is a Human action: agents commit, they never push.
 #
 # Environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-# SUPABASE_SERVICE_ROLE_KEY) are set in the Netlify dashboard, never in this file.
+# SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SITE_URL) are set in the Netlify dashboard,
+# never in this file. The full list is .env.example; keep the two in step.
+#
+# NEXT_PUBLIC_SITE_URL is not optional and is easy to miss because this comment used to
+# omit it. Two things depend on it, and they fail in opposite directions:
+#   * lib/env.ts siteUrl() THROWS when it is unset, so magic-link login fails loudly.
+#   * lib/env.ts cookieSecure() returns false when it is unset or not https, which drops
+#     the `Secure` attribute from the session cookie SILENTLY.
+# Because it is NEXT_PUBLIC_, changing it requires a rebuild, not just a redeploy
+# (README "Deploying"). Set it to the deployed origin, no trailing slash, no path.
 
 [build]
   command = "npm run build"
