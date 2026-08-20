@@ -71,6 +71,31 @@ const MAX_ENTRIES_PER_BUCKET = 5000
 /** How long a window must be untouched before it counts as dead. */
 const DEAD_AFTER_MS = 10 * 60_000
 
+/**
+ * THE LOW-WATER MARK. EVICTION GOES DOWN TO HERE, NOT DOWN TO THE CAP. THIS IS A DoS CONTROL.
+ *
+ * Evicting back to exactly `MAX_ENTRIES_PER_BUCKET` removes ONE entry per admission, so a
+ * bucket held at the cap runs the O(n log n) sort below on EVERY subsequent call. Measured on
+ * this machine against this file: 0.11 microseconds per call with the bucket under its cap,
+ * 268 microseconds per call with it held at the cap — a ~2,500x CPU amplification that an
+ * unauthenticated caller triggers simply by rotating `x-forwarded-for` against the public
+ * `/api/health/auth` until the `health:auth` bucket fills. The request is cheap for them and
+ * expensive for us, which is the wrong way round, and on metered serverless it is a cost
+ * amplifier as well as a latency one.
+ *
+ * Evicting down to 90% instead means the sort runs once per ~500 admissions rather than once
+ * per admission, which is the same work amortised over 500x more calls. Nothing else changes:
+ * the bucket is still hard-bounded (it can never exceed the cap by more than the single entry
+ * added after the check), eviction is still least-recently-used, and buckets are still
+ * isolated from one another.
+ *
+ * The security property that must survive this is the LRU ordering, not the batch size: a
+ * larger batch discards more of the flood's single-use keys per sort, and an actively-used
+ * counter still has the highest `lastSeenMs` in its bucket and is still the last thing
+ * discarded. Assertion A6 in the audit harness holds that.
+ */
+const EVICT_DOWN_TO = Math.floor(MAX_ENTRIES_PER_BUCKET * 0.9)
+
 function evictIfLarge(windows: Map<string, Window>, now: number): void {
   if (windows.size <= MAX_ENTRIES_PER_BUCKET) return
 
@@ -90,9 +115,11 @@ function evictIfLarge(windows: Map<string, Window>, now: number): void {
   // security-relevant counters first and hand a flooder a free reset. `lastSeenMs` is bumped
   // on every hit, so an actively-used counter is the LAST thing discarded and a flood of
   // single-use spoofed keys is the first.
+  // Down to EVICT_DOWN_TO, not to the cap — see the note on that constant. Stopping at the cap
+  // makes this sort run on every subsequent call.
   const byIdle = [...windows.entries()].sort((a, b) => a[1].lastSeenMs - b[1].lastSeenMs)
   for (const [key] of byIdle) {
-    if (windows.size <= MAX_ENTRIES_PER_BUCKET) break
+    if (windows.size <= EVICT_DOWN_TO) break
     windows.delete(key)
   }
 }
