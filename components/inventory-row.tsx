@@ -71,18 +71,22 @@ export function InventoryRow({
         {stale ? <StaleBadge ageLabel={formatRelativeAge(row.updated_at, serverNow)} /> : null}
       </div>
 
-      <AvailabilityLines row={row} authority={authority} />
-
-      <p className={styles.meta}>
-        {/* Source attribution is a trust feature: a rep seeing whether a number came from
-            QuickBooks or from a person is what makes the eventual cutover observable rather
-            than silent. */}
-        <span className={styles.source}>{sourceLabel(row.source)}</span>
-        {' · '}
-        <RelativeTime iso={row.updated_at} />
-      </p>
-
+      {/* AvailabilityLines and the source/updated line used to render HERE, in the collapsed
+          summary. Every figure they showed is already in the <dl> below, so the collapsed card
+          was ~660px tall on a 375px phone -- one product per screen for a rep scanning 97 of
+          them. They now render inside the panel; nothing was lost, only de-duplicated. */}
       <div id={panelId} className={styles.panel} hidden={!expanded}>
+        <AvailabilityLines row={row} authority={authority} />
+
+        <p className={styles.meta}>
+          {/* Source attribution is a trust feature: a rep seeing whether a number came from
+              QuickBooks or from a person is what makes the eventual cutover observable rather
+              than silent. */}
+          <span className={styles.source}>{sourceLabel(row.source)}</span>
+          {' · '}
+          <RelativeTime iso={row.updated_at} />
+        </p>
+
         <dl className={styles.details}>
           <div className={styles.detailRow}>
             <dt>Category</dt>

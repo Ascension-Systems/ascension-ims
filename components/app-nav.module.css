@@ -55,9 +55,21 @@
    narrow phone never clips a destination. */
 .tabs {
   display: flex;
-  flex-wrap: wrap;
+  /* nowrap + overflow-x is what actually delivers the scrolling strip described above. This was
+     `flex-wrap: wrap`, which wrapped the tabs onto a second row on a 375px phone and cost ~90px
+     of vertical space before any page content. */
+  flex-wrap: nowrap;
   gap: var(--space-2);
   padding: 0 var(--space-3) var(--space-3);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+/* The strip is scrolled by touch; a visible bar would only eat height on a phone. */
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {

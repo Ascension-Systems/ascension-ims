@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { NativeLinkHandler } from '@/components/native-link-handler'
 
 /**
  * Branded as "Ascension IT IMS" (Inventory Management System). This reverses the earlier D2
@@ -42,6 +43,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        {/* Native-only: routes document links through an in-app browser sheet that has a Done
+            button, so tapping "View" in the iOS app is no longer a one-way trip. Renders
+            nothing and attaches no listener on the web. */}
+        <NativeLinkHandler />
         {/*
           Service worker registration. The worker passes every fetch straight through to the
           network and caches nothing; its only job is to satisfy Chrome's installability
