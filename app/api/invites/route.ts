@@ -57,13 +57,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INVALID_INPUT', message: 'Expected a JSON body.' }, { status: 400 })
   }
 
-  const { emails } = (body ?? {}) as { emails?: unknown }
+  const { emails, role } = (body ?? {}) as { emails?: unknown; role?: unknown }
   if (typeof emails !== 'string' || emails.trim().length === 0) {
     return NextResponse.json(
       { error: 'INVALID_INPUT', message: 'Paste at least one email address.' },
       { status: 400 },
     )
   }
+  // Role of the invitation. Anything but the literal 'admin' is a rep, so a malformed value
+  // can only ever UNDER-privilege. An admin choosing 'admin' here is intended: onboarding an
+  // admin needs BOTH this invite AND the admin code (claim_enrollment enforces the match).
+  const inviteRole: 'rep' | 'admin' = role === 'admin' ? 'admin' : 'rep'
 
   // Accept whatever shape a client's list arrives in: newlines, commas, semicolons, tabs.
   const raw = emails
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from('invited_reps')
     .upsert(
-      valid.map((email) => ({ email, invited_by: admin.profile.id })),
+      valid.map((email) => ({ email, invited_by: admin.profile.id, role: inviteRole })),
       { onConflict: 'email', ignoreDuplicates: true },
     )
     .select('email')

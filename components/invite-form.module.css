@@ -117,3 +117,67 @@
 
 .ok { border-left: var(--rule-width) solid var(--accent); color: var(--accent-deep); }
 .err { border-left: var(--rule-width) solid var(--mark); color: var(--ink); }
+
+/* Rotate-code button: quiet, secondary to the code itself. */
+.rotate {
+  margin-top: var(--space-3);
+  align-self: flex-start;
+  min-height: var(--tap-chip);
+  padding: 0 var(--space-4);
+  border: var(--border-width) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: var(--text-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.rotate:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--ink);
+}
+.rotate:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Admin code card: a cyan left rule so it reads as the higher-privilege sibling of the rep code
+   without introducing a new status colour. */
+.adminCard {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  background: var(--surface);
+  border: var(--border-width) solid var(--line);
+  border-left: var(--rule-width) solid var(--brand-cyan-deep);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* Rep / Admin invite toggle. Filled active pill (not colour alone). */
+.roleToggle {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-3);
+}
+.roleBtn {
+  min-height: var(--tap-chip);
+  padding: 0 var(--space-4);
+  border: var(--border-width) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: var(--text-components);
+  font-weight: 600;
+  cursor: pointer;
+}
+.roleActive,
+.roleActive:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+.roleBtn:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}

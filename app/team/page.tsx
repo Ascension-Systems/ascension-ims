@@ -29,14 +29,16 @@ export default async function TeamPage() {
       .order('invited_at', { ascending: true }),
     supabase
       .from('enrollment_codes')
-      .select('code, label, expires_at, max_uses, uses, is_active')
+      .select('code, label, role, expires_at, max_uses, uses, is_active')
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
   ])
 
   const rows = invites ?? []
   const pending = rows.filter((r) => !r.claimed_at)
-  const active = codes?.[0] ?? null
+  // Newest active code of each role (the list is already newest-first).
+  const repCode = codes?.find((c) => c.role === 'rep') ?? null
+  const adminCode = codes?.find((c) => c.role === 'admin') ?? null
 
   return (
     <main className={styles.main}>
@@ -62,7 +64,12 @@ export default async function TeamPage() {
         </div>
       </div>
 
-      <InviteForm code={active?.code ?? null} uses={active?.uses ?? 0} maxUses={active?.max_uses ?? null} />
+      <InviteForm
+        repCode={repCode?.code ?? null}
+        repUses={repCode?.uses ?? 0}
+        repMaxUses={repCode?.max_uses ?? null}
+        adminCode={adminCode?.code ?? null}
+      />
 
       {rows.length > 0 ? (
         <ul className={styles.list}>
