@@ -15,7 +15,7 @@ const SERVER_URL = process.env.CAP_SERVER_URL || 'https://ascension-inventory.ne
 
 const config: CapacitorConfig = {
   appId: 'com.ascensionitai.inventory',
-  appName: 'Ascension Inventory',
+  appName: 'AIT IMS',
   webDir: 'native-shell/www',
   server: {
     // A real https origin makes the WebView load the live app. cleartext stays false so only
