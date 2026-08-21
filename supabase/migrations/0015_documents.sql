@@ -8,8 +8,10 @@
 -- FILES LIVE IN A PRIVATE BUCKET. Nothing is ever served from a public URL.
 -- Access is a SHORT-LIVED SIGNED URL minted only after the row's RLS SELECT has
 -- already authorised the caller, and the storage bucket carries its OWN RLS so a
--- guessed object path is refused even if the app layer were bypassed. Two gates,
--- same predicate: provisioned to read, admin to write.
+-- guessed object path is refused even if the app layer were bypassed. Both the
+-- table and the bucket enforce the SAME rule in their policy predicate: admin sees
+-- all; a rep sees only documents that are active and inside their start/end window;
+-- write is admin-only. Visibility is not left to app code (see the READ policy note).
 --
 -- Written, NOT applied. The Human pastes this into the Supabase SQL editor.
 -- ============================================================================
@@ -47,6 +49,11 @@ CREATE INDEX IF NOT EXISTS documents_kind_idx ON public.documents (kind, active,
 CREATE INDEX IF NOT EXISTS documents_sku_idx  ON public.documents (product_sku);
 
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+
+-- Base table privilege. RLS decides WHICH rows; the role still needs the table grant to see
+-- any at all. SELECT only for authenticated (reps + admins read) -- writes go through the
+-- service role in the upload API, mirroring public.commitments in 0012. anon gets nothing.
+GRANT SELECT ON public.documents TO authenticated;
 
 -- READ is scoped by VISIBILITY, not merely provisioning. This is the fix for the audit
 -- finding: "Hidden from reps" (active=false) and a promotion's start/end window are things
