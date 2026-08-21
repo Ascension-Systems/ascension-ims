@@ -4,12 +4,12 @@ import type { MetadataRoute } from 'next'
  * PWA manifest. Installable via "Add to Home Screen": no app-store review, no 100-device
  * provisioning cap, no 7-day sideload expiry, and updates reach all users instantly.
  *
- * Achromatic, and NO COMPANY NAME, NO CLIENT NAME, NO INVENTED BRAND (D2).
+ * Branded as Ascension IT IMS (reverses D2; Human-approved Ascension IT branding 2026-08-21).
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Inventory Portal',
-    short_name: 'Inventory',
+    name: 'Ascension IT IMS',
+    short_name: 'Ascension IT',
     description: 'Live stock availability for the sales team.',
     display: 'standalone',
     start_url: '/inventory',

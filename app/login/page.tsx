@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { signIn } from './actions'
+import { BrandMark } from '@/components/logo'
 import styles from '../message.module.css'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,7 @@ export default async function LoginPage({
 
   return (
     <main className={styles.main}>
+      <BrandMark className={styles.brandMark} alt="Ascension IT" />
       <h1 className={styles.heading}>Sign in</h1>
       <p className={styles.body}>Enter your work email and password.</p>
 

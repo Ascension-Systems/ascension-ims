@@ -2,16 +2,17 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 /**
- * NO COMPANY NAME, NO CLIENT NAME, NO INVENTED BRAND. "Inventory Portal" is a description,
- * not a brand (D2).
+ * Branded as "Ascension IT IMS" (Inventory Management System). This reverses the earlier D2
+ * decision to ship unbranded — the Human approved Ascension IT branding on 2026-08-21 and
+ * supplied the logo (public/brand/).
  */
 export const metadata: Metadata = {
-  title: 'Inventory Portal',
+  title: 'Ascension IT IMS',
   description: 'Live stock availability for the sales team.',
-  applicationName: 'Inventory Portal',
+  applicationName: 'Ascension IT IMS',
   appleWebApp: {
     capable: true,
-    title: 'Inventory',
+    title: 'Ascension IT',
     statusBarStyle: 'default',
   },
   formatDetection: { telephone: false },

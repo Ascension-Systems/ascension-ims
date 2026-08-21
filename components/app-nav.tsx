@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SignOutButton } from './sign-out-button'
+import { BrandMark } from './logo'
 import styles from './app-nav.module.css'
 
 type Role = 'rep' | 'admin'
@@ -36,7 +37,10 @@ export function AppNav({ role }: { role: Role }) {
   return (
     <header className={styles.bar}>
       <div className={styles.top}>
-        <span className={styles.wordmark}>Inventory</span>
+        <div className={styles.brand}>
+          <BrandMark className={styles.mark} />
+          <span className={styles.wordmark}>Ascension IT IMS</span>
+        </div>
         <SignOutButton />
       </div>
 

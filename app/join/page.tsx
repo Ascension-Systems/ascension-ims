@@ -1,4 +1,5 @@
 import { JoinForm } from '@/components/join-form'
+import { BrandMark } from '@/components/logo'
 import styles from '@/app/message.module.css'
 
 /**
@@ -15,6 +16,7 @@ export const metadata = { title: 'Join — Inventory Portal' }
 export default function JoinPage() {
   return (
     <main className={styles.main}>
+      <BrandMark className={styles.brandMark} alt="Ascension IT" />
       <h1 className={styles.heading}>Set up your access</h1>
       <p className={styles.body}>
         Enter the code you were given and your work email address. You will be signed in
