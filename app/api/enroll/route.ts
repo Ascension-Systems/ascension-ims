@@ -82,8 +82,12 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient()
 
-  // 1. The auth user, WITH the chosen password. email_confirm: true because the allowlist is
-  //    the proof of identity -- an admin already vouched for this address.
+  // 1. Resolve the auth user. CRITICAL ORDERING: never set a password on a PRE-EXISTING account
+  //    here. Authorisation (step 2) must run first — setting the password before the code and
+  //    invitation are validated would let a bogus request overwrite ANY known account's password
+  //    from just its email address, an unauthenticated account takeover (found in the pen test).
+  //    A NEW account is created with the chosen password (there is no victim to overwrite); an
+  //    EXISTING account's credentials are touched only after the claim succeeds (step 2b).
   let userId: string | null = null
   const created = await admin.auth.admin.createUser({
     email: cleanEmail,
@@ -92,13 +96,10 @@ export async function POST(request: Request) {
   })
 
   if (created.error) {
-    // An existing account is not distinguished to the caller (that would reveal who already has
-    // one). Look it up and set the password; claim_enrollment still refuses a second claim.
+    // Account already exists. Find it; leave its credentials untouched until authorised.
     const { data: list } = await admin.auth.admin.listUsers()
     userId = list?.users.find((u) => u.email?.toLowerCase() === cleanEmail)?.id ?? null
-    if (userId) {
-      await admin.auth.admin.updateUserById(userId, { password })
-    } else {
+    if (!userId) {
       console.error('[enroll] createUser failed:', created.error.message)
       return NextResponse.json({ error: 'REFUSED', message: REFUSAL }, { status: 400 })
     }
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
   }
 
   // 2. Validate the code AND the invitation together and provision, atomically under a row lock.
+  //    For a pre-existing account no credential has changed yet, so a refusal here leaves it
+  //    completely untouched.
   const { error: claimError } = await admin.rpc('claim_enrollment', {
     p_code: cleanCode,
     p_email: cleanEmail,
@@ -115,12 +118,25 @@ export async function POST(request: Request) {
 
   if (claimError) {
     console.error('[enroll] claim refused:', claimError.code, claimError.message)
-    // Clean up an account we created that will never be usable. Never delete a pre-existing
-    // account (KY014, a second claim) -- that would let anyone with the code delete a real rep.
-    if (!created.error && claimError.code !== 'KY014') {
+    // Delete ONLY an account we just created. A pre-existing account is never touched — not
+    // deleted, and (per step 1) its password was never set.
+    if (!created.error) {
       await admin.auth.admin.deleteUser(userId).catch(() => {})
     }
     return NextResponse.json({ error: 'REFUSED', message: REFUSAL }, { status: 400 })
+  }
+
+  // 2b. Authorised. If the account PRE-EXISTED (a rare unclaimed-invite edge), set the chosen
+  //     password NOW — only after the claim succeeded. A new account already has it from step 1.
+  if (created.error) {
+    const { error: pwError } = await admin.auth.admin.updateUserById(userId, { password })
+    if (pwError) {
+      console.error('[enroll] set password failed:', pwError.message)
+      return NextResponse.json(
+        { ok: true, next: '/login', message: 'Your account is ready. Sign in with the password you just set.' },
+        { status: 200 },
+      )
+    }
   }
 
   // 3. Sign the new rep in with the password they just chose. The cookie-bound client sets the
