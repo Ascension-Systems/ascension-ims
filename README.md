@@ -1,6 +1,6 @@
 # Inventory Portal
 
-A mobile-first, authenticated sales portal. Reps sign in with a magic link and see a
+A mobile-first, authenticated sales portal. Reps sign in with an email and password and see a
 searchable, filterable inventory list showing **on hand**, **committed**, **available**,
 **incoming**, source attribution and freshness.
 
@@ -45,7 +45,9 @@ show-both-numbers presentation, because that is step 1's centrepiece.
 
 - **Next.js 15 (App Router)** + **TypeScript** (strict)
 - **Supabase** — Postgres + Auth, via `@supabase/supabase-js` and `@supabase/ssr`
-- **Magic-link passwordless auth.** No password fields, no reset flow, no credential storage.
+- **Email + password auth.** Passwords are set once at onboarding (`/join`, with an access code),
+  and an admin can reset one from Team access. Magic links were removed: the flow depended on
+  email delivery that was not reliable at this scale. See the header of `app/login/actions.ts`.
 - **Netlify** hosting; deploys on push to `main`
 - **PWA** — installable via "Add to Home Screen"
 - **Plain CSS + CSS Modules.** No Tailwind, no CSS-in-JS. The achromatic token set lives in
@@ -154,9 +156,14 @@ build time** — changing it in Netlify requires a rebuild, not just a redeploy.
 `import 'server-only'`), and an ESLint `no-restricted-imports` rule limits importers to
 `app/api/**` and `lib/inventory-source.stub.ts`. The frontend uses the anon key only.
 
-**No secrets are ever committed.** There are none anywhere in this repo, including in the seed
-data — not even plausible-looking placeholders. Magic-link auth means there are no passwords
-to placeholder in the first place.
+**No secrets belong in this repo**, including in the seed data — not even plausible-looking
+placeholders.
+
+> This section used to read "there are none anywhere in this repo", justified by magic-link auth
+> meaning no passwords existed to commit. That justification lapsed when sign-in moved to
+> passwords, and real account passwords did subsequently land in `verify/hosted/*.mjs`. Treat the
+> rule as a requirement to enforce, not a property to assume. `scripts/check-no-secrets.sh` has no
+> password rule — it flagged those lines only incidentally, through its email-domain check.
 
 **One more name, and it is deliberately not in `.env.example`.** `PORTAL_BASE_URL` tells the
 verification harness where a running copy of this app is, so it can exercise the three HTTP
@@ -328,7 +335,9 @@ inventory.
 > during the demo without an admin in the Supabase dashboard.
 
 For each person: dashboard → **Authentication → Users → Add user** → enter their email
-address. No password is set; this project has none.
+address. Leave the password blank — they set their own at `/join` using the access code from
+Team access. (Before the move to password auth this line read "no password is set; this project
+has none", which is no longer true.)
 
 To make someone an admin, in the SQL editor:
 

@@ -8,9 +8,11 @@
 //
 //   . ./.env.local && node verify/hosted/documents.mjs
 //
-// Needs two accounts with known passwords (set for verification):
-//   REP:   calebjawo@gmail.com / REDACTED-USE-ENV-LOCAL
-//   ADMIN: info@kyriesystems.com / REDACTED-USE-ENV-LOCAL
+// Needs two accounts with known passwords, supplied via .env.local (which is gitignored):
+//   VERIFY_REP_EMAIL / VERIFY_REP_PASSWORD
+//   VERIFY_ADMIN_EMAIL / VERIFY_ADMIN_PASSWORD
+// These were once literals in this file. They are real account passwords, so they belong in the
+// dotenv file with every other credential, not in tracked source.
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 
@@ -23,6 +25,16 @@ const env = Object.fromEntries(
       return [l.slice(0, i).trim(), l.slice(i + 1).trim()]
     }),
 )
+
+/** Credentials must come from .env.local. Fail loudly rather than half-running with undefined. */
+function requireEnv(name) {
+  const v = env[name]
+  if (!v) {
+    console.error(`Missing ${name} in .env.local — see .env.example for the required names.`)
+    process.exit(1)
+  }
+  return v
+}
 const URL = env.NEXT_PUBLIC_SUPABASE_URL
 const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const SVC = env.SUPABASE_SERVICE_ROLE_KEY
@@ -79,8 +91,8 @@ async function main() {
   }
 
   try {
-    const rep = await signedClient('calebjawo@gmail.com', 'REDACTED-USE-ENV-LOCAL')
-    const admin = await signedClient('info@kyriesystems.com', 'REDACTED-USE-ENV-LOCAL')
+    const rep = await signedClient(requireEnv('VERIFY_REP_EMAIL'), requireEnv('VERIFY_REP_PASSWORD'))
+    const admin = await signedClient(requireEnv('VERIFY_ADMIN_EMAIL'), requireEnv('VERIFY_ADMIN_PASSWORD'))
     const anon = createClient(URL, ANON, { auth: { persistSession: false } })
 
     console.log('\nFinding 1 — a REP must not reach hidden / scheduled / expired rows or files:')

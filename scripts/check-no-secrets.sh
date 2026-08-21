@@ -22,6 +22,10 @@ cd "$ROOT"
 EXCLUDES=(
   --exclude-dir=node_modules
   --exclude-dir=.next
+  # Netlify build output. Same category as .next/out: generated bundles, not source. It
+  # contains the compiled app (and therefore any public key baked into it), so scanning it
+  # reported JWT hits that are build artifacts, not commits.
+  --exclude-dir=.netlify
   --exclude-dir=.git
   --exclude-dir=out
   --exclude-dir=coverage
@@ -50,7 +54,11 @@ scan() {
   local label="$1"
   local pattern="$2"
   local hits
-  hits="$(grep -rInE "$pattern" . "${EXCLUDES[@]}" 2>/dev/null || true)"
+  # A line carrying the marker `not-a-secret:` is exempt. This exists for deliberate NEGATIVE
+  # fixtures -- a wrong password submitted to prove the server rejects it is test input, not a
+  # credential. The marker must be on the same line, so every exemption is visible at the site
+  # it applies to and greppable in review; there is no file-level or global opt-out.
+  hits="$(grep -rInE "$pattern" . "${EXCLUDES[@]}" 2>/dev/null | grep -v 'not-a-secret:' || true)"
   if [ -n "$hits" ]; then
     report "$label" "$hits"
   else
@@ -71,6 +79,25 @@ scan "no Supabase key prefixes (sbp_/sb_secret_/sb_publishable_)" \
 # --- Credentials assigned a literal value. Prose mentioning the words is fine. ----------
 scan "no literal credential assignments" \
   "(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key)[[:space:]]*[:=][[:space:]]*['\"][^'\"\$]{6,}['\"]"
+
+# --- A credential passed POSITIONALLY, next to an email literal. -------------------------
+#
+# The rule above only sees `password = "..."` -- a literal assigned to a credential-NAMED thing.
+# It cannot see the shape credentials actually took in this repo:
+#
+#     const rep = await signedClient('rep@example.invalid', 'REDACTED-EXAMPLE')
+#
+# There is no variable called `password` anywhere in that line, so the named-assignment pattern
+# had nothing to match, and two real account passwords sat in verify/hosted/*.mjs while this
+# scanner reported ok. It flagged those files only incidentally, via the example.invalid domain
+# rule -- a different check catching it for a different reason, which is luck, not coverage.
+#
+# This pattern matches an email-shaped literal followed by another string literal in the same
+# argument list, which is what a sign-in call looks like regardless of the helper's name.
+# The second literal must NOT itself be an email: `IN ('a@example.invalid', 'b@example.invalid')` is an address
+# list, not a credential pair, and matching it made this rule cry wolf on the README's SQL.
+scan "no credential passed positionally beside an email literal" \
+  "['\"][A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}['\"][[:space:]]*,[[:space:]]*['\"][^'\"@]{6,}['\"]"
 
 # --- The service-role key must never be exposed to the browser. -------------------------
 scan "service-role key never prefixed NEXT_PUBLIC_" 'NEXT_PUBLIC_[A-Z_]*SERVICE_ROLE'
@@ -187,8 +214,14 @@ else
 fi
 
 # --- Seed and verification email addresses must be non-routable. ------------------------
+# Two corrections here:
+#  1. This grep did not use EXCLUDES, so it scanned THIS FILE and failed on the addresses in its
+#     own explanatory comments -- the check reporting itself.
+#  2. The property that matters is NON-ROUTABLE, and `.invalid` is IANA-reserved in full, so
+#     `hacker@evil.invalid` is exactly as unroutable as `x@example.invalid`. Hardcoding the
+#     `example.invalid` spelling failed addresses that already satisfied the actual requirement.
 emails="$(grep -rIoE "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}" \
-  supabase/seed verify scripts 2>/dev/null | grep -v 'example\.invalid' || true)"
+  supabase/seed verify scripts "${EXCLUDES[@]}" 2>/dev/null | grep -vE '\.invalid([^A-Za-z0-9]|$)' || true)"
 if [ -n "$emails" ]; then
   report "seed/verify emails use the reserved example.invalid domain" "$emails"
 else

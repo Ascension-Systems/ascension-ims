@@ -54,7 +54,7 @@ async function main() {
     const cases = [
       ['POST', '/api/commitments', { sku: 'SEA-9007', location: 'default', qty: 1 }],
       ['POST', '/api/documents', {}],
-      ['POST', '/api/invites', { emails: 'x@y.com' }],
+      ['POST', '/api/invites', { emails: 'x@example.invalid' }],
       ['PATCH', '/api/inventory', { sku: 'SEA-9007', qty_on_hand: 0 }],
       ['GET', '/api/documents/00000000-0000-0000-0000-000000000000/file'],
     ]
@@ -66,7 +66,7 @@ async function main() {
 
   console.log('\nEnrollment endpoint is public BUT gated (a wrong code/email is refused, not enrolled):')
   {
-    const r = await head('/api/enroll', 'POST', { code: 'WRONG-CODE-XYZ', email: 'intruder@example.invalid', password: 'password123' })
+    const r = await head('/api/enroll', 'POST', { code: 'WRONG-CODE-XYZ', email: 'intruder@example.invalid', password: 'password123' }) // not-a-secret: deliberately wrong credentials, asserts enrollment REJECTS them
     const body = await r.json().catch(() => ({}))
     ok(r.status === 400, '/api/enroll reachable but refuses a bad code (400)', `got ${r.status}`)
     ok(/did not match an open invitation/i.test(body.message || ''), 'refusal message is generic (no roster oracle)')

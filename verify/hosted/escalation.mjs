@@ -11,6 +11,16 @@ const env = Object.fromEntries(
     const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]
   }),
 )
+
+/** Credentials must come from .env.local. Fail loudly rather than half-running with undefined. */
+function requireEnv(name) {
+  const v = env[name]
+  if (!v) {
+    console.error(`Missing ${name} in .env.local — see .env.example for the required names.`)
+    process.exit(1)
+  }
+  return v
+}
 const URL = env.NEXT_PUBLIC_SUPABASE_URL
 const svc = createClient(URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
@@ -38,7 +48,7 @@ async function main() {
     const { data: list } = await svc.auth.admin.listUsers({ perPage: 200 })
     const existing = list.users.find((u) => u.email?.toLowerCase() === email)
     if (existing) return existing.id
-    const { data } = await svc.auth.admin.createUser({ email, password: 'REDACTED-USE-ENV-LOCAL', email_confirm: true })
+    const { data } = await svc.auth.admin.createUser({ email, password: requireEnv('VERIFY_THROWAWAY_PASSWORD'), email_confirm: true })
     return data.user.id
   }
   const adminUid = await mk(A)
@@ -70,7 +80,7 @@ async function main() {
 
   console.log('\nA real REP cannot escalate through the database directly:')
   {
-    const { c: rep, uid: repRealUid } = await signedClient('calebjawo@gmail.com', 'REDACTED-USE-ENV-LOCAL')
+    const { c: rep, uid: repRealUid } = await signedClient(requireEnv('VERIFY_REP_EMAIL'), requireEnv('VERIFY_REP_PASSWORD'))
     const selfElevate = await rep.from('profiles').update({ role: 'admin' }).eq('id', repRealUid).select('role')
     const stillRep = (await roleOf(repRealUid)) === 'rep'
     ok(((selfElevate.data ?? []).length === 0 || !!selfElevate.error) && stillRep, 'rep CANNOT set their own profile role to admin')
