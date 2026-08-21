@@ -11,7 +11,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
  *
  * appId is the bundle identifier registered in App Store Connect. Signing team is set in Xcode.
  */
-const SERVER_URL = process.env.CAP_SERVER_URL || 'https://REPLACE-WITH-YOUR-DEPLOYED-URL'
+const SERVER_URL = process.env.CAP_SERVER_URL || 'https://ascension-inventory.netlify.app'
 
 const config: CapacitorConfig = {
   appId: 'com.ascensionitai.inventory',
