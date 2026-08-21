@@ -15,7 +15,7 @@
   },
   "overrides": [
     {
-      "files": ["app/api/**/*.ts", "lib/inventory-source.stub.ts"],
+      "files": ["app/api/**/*.ts", "app/login/actions.ts", "lib/inventory-source.stub.ts"],
       "rules": {
         "no-restricted-imports": "off"
       }

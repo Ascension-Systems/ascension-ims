@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
 
 /**
@@ -15,12 +16,23 @@ import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
  * ONE GENERIC FAILURE MESSAGE. "No such account" and "wrong password" return the same thing,
  * so this form cannot be used to discover which email addresses have accounts.
  *
- * RATE LIMITED, because a password form is brute-forceable in a way a magic-link request is
- * not. Per-IP and a global ceiling, both before the auth server is touched. Real per-account
- * lockout is a fast-follow; for a pilot the limiter plus a strong password is the right floor.
+ * RATE LIMITED on TWO axes, both before the auth server is touched:
+ *   1. Per-IP + a global ceiling (lib/rate-limit.ts) — bounds ONE source, but a single serverless
+ *      instance's memory only, and the key is a source IP, so a distributed brute-force against
+ *      one known account (info@kyriesystems.com) slips under it.
+ *   2. Per-EMAIL lockout (0019_login_lockout.sql) — a DB-backed counter shared across every
+ *      instance, so N failures against ONE account lock it regardless of how many IPs spread them.
+ *   Both run; neither replaces the other.
+ *
+ * The per-email path runs under the SERVICE-ROLE client because login_attempts is RLS-locked to
+ * service_role. It is deliberately FAIL-OPEN: any error from the limiter is logged and swallowed
+ * so a DB hiccup slows the hardening but can never lock every account out — availability wins over
+ * this one control. It also NEVER branches user-visible behaviour on whether the email exists: a
+ * locked email returns the same generic 'rate' redirect as the IP limiter, so this adds no
+ * account-existence oracle.
  *
  * redirect() throws NEXT_REDIRECT, so every redirect() below stays out of any try/catch --
- * signInWithPassword returns an { error }, it does not throw, so no try is needed at all.
+ * signInWithPassword returns an { error }, it does not throw, so no try is needed for it.
  */
 export async function signIn(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim().toLowerCase()
@@ -37,13 +49,53 @@ export async function signIn(formData: FormData) {
     redirect('/login?error=missing')
   }
 
+  // Per-account lockout, checked BEFORE the auth server is touched. Fail-open: a limiter error
+  // must not block a legitimate sign-in. Same generic 'rate' message as the IP limiter, so a
+  // locked known-good address and any other email are indistinguishable to the caller.
+  const admin = createAdminClient()
+  let locked = false
+  try {
+    const { data, error } = await admin.rpc('is_login_locked', { p_email: email })
+    if (error) {
+      console.error('[login] is_login_locked failed (failing open):', error.code, error.message)
+    } else {
+      locked = data != null
+    }
+  } catch (e) {
+    console.error('[login] is_login_locked threw (failing open):', e)
+  }
+  if (locked) {
+    redirect('/login?error=rate')
+  }
+
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     // Logged server-side; the caller gets one generic message either way.
     console.error('[login] signInWithPassword failed:', error.status, error.message)
+    // Record the failure against the submitted email. Fail-open, and tracked whether or not the
+    // account exists so this can't be used to probe which addresses are real.
+    try {
+      const { error: regError } = await admin.rpc('register_login_failure', { p_email: email })
+      if (regError) {
+        console.error('[login] register_login_failure failed:', regError.code, regError.message)
+      }
+    } catch (e) {
+      console.error('[login] register_login_failure threw:', e)
+    }
     redirect('/login?error=bad')
+  }
+
+  // Success: clear the failure counter for this email. Fail-open — a clear that doesn't land
+  // just leaves a stale count that the window will expire on its own.
+  try {
+    const { error: clearError } = await admin.rpc('clear_login_failures', { p_email: email })
+    if (clearError) {
+      console.error('[login] clear_login_failures failed:', clearError.code, clearError.message)
+    }
+  } catch (e) {
+    console.error('[login] clear_login_failures threw:', e)
   }
 
   redirect('/inventory')
