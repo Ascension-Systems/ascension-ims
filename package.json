@@ -26,7 +26,8 @@
     "seed:documents": "node scripts/seed-documents.mjs",
     "check:disposition": "node verify/disposition.mjs --check",
     "check:secrets": "bash scripts/check-no-secrets.sh",
-    "verify:production": "node verify/hosted/production.mjs"
+    "verify:production": "node verify/hosted/production.mjs",
+    "verify:escalation": "node verify/hosted/escalation.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.0",
