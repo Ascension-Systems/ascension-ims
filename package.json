@@ -27,7 +27,8 @@
     "check:disposition": "node verify/disposition.mjs --check",
     "check:secrets": "bash scripts/check-no-secrets.sh",
     "verify:production": "node verify/hosted/production.mjs",
-    "verify:escalation": "node verify/hosted/escalation.mjs"
+    "verify:escalation": "node verify/hosted/escalation.mjs",
+    "verify:takeover": "node verify/hosted/takeover.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.0",

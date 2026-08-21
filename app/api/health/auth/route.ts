@@ -145,11 +145,15 @@ function mapObservation(threw: boolean, status: number | undefined, code: string
     }
   }
   if (code === 'otp_disabled') {
+    // The app moved from magic links to EMAIL+PASSWORD (2026-08-20). OTP being disabled is now
+    // the EXPECTED, correct state — password sign-in does not use it — so this is no longer a
+    // fault. The endpoint still reports otpEnabled:'no' factually; the verdict reflects that the
+    // things password auth actually needs (endpoint reachable, anon key accepted) are present.
     return {
       authEndpointReachable: 'yes',
       anonKeyAccepted: 'yes',
       otpEnabled: 'no',
-      verdict: 'broken',
+      verdict: 'no_fault_detected',
     }
   }
   if (status === 401 || code === 'invalid_api_key') {
