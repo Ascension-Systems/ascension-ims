@@ -1,0 +1,118 @@
+.bar {
+  padding: var(--space-4) var(--space-4) 0;
+}
+
+.openBtn {
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  border: var(--border-width) dashed var(--accent-line);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: var(--text-components);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.openBtn:hover {
+  border-color: var(--accent);
+}
+
+.form {
+  margin: var(--space-4) var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--surface);
+  border: var(--border-width) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.row {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.opt {
+  font-weight: 500;
+  color: var(--ink-faint);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.input {
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.file {
+  font-size: var(--text-components);
+  color: var(--ink-soft);
+  padding: var(--space-2) 0;
+}
+
+.error {
+  font-size: var(--text-components);
+  color: var(--mark);
+  font-weight: 600;
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.cancel {
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  border: var(--border-width) solid var(--line);
+  background: var(--surface);
+  font-size: var(--text-components);
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.submit {
+  min-height: var(--tap);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: var(--text-components);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit:disabled,
+.cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

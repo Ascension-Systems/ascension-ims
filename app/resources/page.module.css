@@ -1,0 +1,152 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-bottom: var(--space-6);
+}
+
+.intro {
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow {
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: var(--space-1);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.subtitle {
+  margin-top: var(--space-2);
+  font-size: var(--text-components);
+  color: var(--ink-soft);
+  max-width: 46ch;
+}
+
+.section {
+  padding: var(--space-5) var(--space-4) 0;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+
+.empty {
+  padding: var(--space-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  font-size: var(--text-components);
+}
+
+/* Promotions: a little more presence than the sheet list -- these are what a rep opens the app
+   to check. A left rule in the accent, a card with lift. */
+.promoGrid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.promo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: var(--border-width) solid var(--line);
+  border-left: var(--rule-width) solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.promoHidden {
+  opacity: 0.6;
+}
+
+.promoBody {
+  min-width: 0;
+}
+
+.promoName {
+  font-family: var(--font-display);
+  font-size: var(--text-name);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.promoDesc {
+  margin-top: 2px;
+  font-size: var(--text-components);
+  color: var(--ink-soft);
+}
+
+.promoMeta {
+  margin-top: var(--space-2);
+  font-size: var(--text-label);
+  color: var(--ink-faint);
+}
+
+.promoActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+.hiddenTag {
+  display: inline-block;
+  margin-top: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--ink-faint);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-label);
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
+.viewBtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-chip);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--surface);
+  font-size: var(--text-components);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.viewBtn:hover {
+  background: var(--accent-deep);
+}
+
+@media (min-width: 700px) {
+  .main {
+    max-width: 780px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .title {
+    font-size: 38px;
+  }
+}

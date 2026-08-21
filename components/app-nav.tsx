@@ -23,6 +23,7 @@ type Role = 'rep' | 'admin'
  */
 const PAGES: { href: string; label: string; roles: Role[] }[] = [
   { href: '/inventory', label: 'Inventory', roles: ['rep', 'admin'] },
+  { href: '/resources', label: 'Resources', roles: ['rep', 'admin'] },
   { href: '/my-commitments', label: 'My commitments', roles: ['rep'] },
   { href: '/reconciliation', label: 'Reconciliation', roles: ['admin'] },
   { href: '/team', label: 'Team', roles: ['admin'] },
