@@ -69,8 +69,20 @@ export async function POST(request: Request) {
     )
   }
 
-  const declared = Number(request.headers.get('content-length') ?? '0')
-  if (Number.isFinite(declared) && declared > MAX_BYTES + 8_192) {
+  // Require Content-Length and cap it BEFORE reading. Without this, a chunked/header-less body
+  // has declared=0, sails past the check, and formData() buffers the whole thing into memory
+  // before file.size is known. Browser FormData uploads always set this header, so requiring it
+  // costs our own client nothing while closing the memory-DoS path (admin-gated, but no reason
+  // to leave it open).
+  const clHeader = request.headers.get('content-length')
+  const declared = Number(clHeader)
+  if (!clHeader || !Number.isFinite(declared) || declared <= 0) {
+    return NextResponse.json(
+      { error: 'LENGTH_REQUIRED', message: 'A Content-Length header is required for uploads.' },
+      { status: 411 },
+    )
+  }
+  if (declared > MAX_BYTES + 8_192) {
     return NextResponse.json(
       { error: 'PAYLOAD_TOO_LARGE', message: 'That file is larger than the 25 MB limit.' },
       { status: 413 },

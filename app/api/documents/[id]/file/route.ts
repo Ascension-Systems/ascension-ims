@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getUser } from '@/lib/auth'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 /**
  * GET -> a short-lived signed URL to the document's file, then redirect to it.
@@ -23,6 +24,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const user = await getUser()
   if (!user) {
     return NextResponse.json({ error: 'NOT_AUTHENTICATED', message: 'Sign in to continue.' }, { status: 401 })
+  }
+
+  // Keyed on the unforgeable user id, so one account cannot hammer this to mint an unbounded
+  // stream of signed URLs (storage egress / cost). Generous enough for real human browsing.
+  const rl = checkRateLimit('documents:file', user.id, 60, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'RATE_LIMITED', message: 'Too many requests. Wait a moment and try again.' },
+      { status: 429 },
+    )
   }
 
   const { id } = await params

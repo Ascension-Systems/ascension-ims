@@ -48,12 +48,28 @@ CREATE INDEX IF NOT EXISTS documents_sku_idx  ON public.documents (product_sku);
 
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
--- Provisioned accounts (rep or admin) may READ. Same predicate as products/inventory,
--- so an unprovisioned signup or a raw anon token sees nothing.
+-- READ is scoped by VISIBILITY, not merely provisioning. This is the fix for the audit
+-- finding: "Hidden from reps" (active=false) and a promotion's start/end window are things
+-- the client relies on to keep embargoed/withdrawn material away from ~100 external reps, so
+-- they MUST live in the policy predicate, not only in the app's read helpers. The anon key
+-- ships to every browser and each rep holds a valid JWT, so anything the app-layer filter
+-- alone hides is still reachable by a rep calling PostgREST/storage directly.
+--   * An ADMIN sees every row (to manage hidden/scheduled/expired ones).
+--   * A REP sees only rows that are active AND currently inside any start/end window.
+-- An unprovisioned signup or raw anon token still sees nothing (is_provisioned() is false).
 DROP POLICY IF EXISTS documents_select_provisioned ON public.documents;
-CREATE POLICY documents_select_provisioned ON public.documents
+DROP POLICY IF EXISTS documents_select_visible ON public.documents;
+CREATE POLICY documents_select_visible ON public.documents
   FOR SELECT TO authenticated
-  USING (public.is_provisioned());
+  USING (
+    COALESCE(public.is_admin(), false)
+    OR (
+      public.is_provisioned()
+      AND active
+      AND (starts_at IS NULL OR starts_at <= now())
+      AND (ends_at   IS NULL OR ends_at   >= now())
+    )
+  );
 
 -- Only admins may write (insert/update/delete) over PostgREST. The upload API adds
 -- validation on top; this is the floor a direct API call cannot get under.
@@ -80,20 +96,58 @@ CREATE TRIGGER documents_set_updated_at
   BEFORE UPDATE ON public.documents
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- Is the object at this storage path backed by a document a REP is allowed to see right now?
+-- SECURITY DEFINER so the storage policy can consult public.documents without RLS recursion,
+-- and so the visibility rule lives in exactly ONE place used by both the table and the bucket.
+CREATE OR REPLACE FUNCTION public.is_document_visible(object_path text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.documents d
+    WHERE d.storage_path = object_path
+      AND d.active
+      AND (d.starts_at IS NULL OR d.starts_at <= now())
+      AND (d.ends_at   IS NULL OR d.ends_at   >= now())
+  );
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.is_document_visible(text) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.is_document_visible(text) TO authenticated, service_role;
+
 -- ----------------------------------------------------------------------------
 -- 2. The private storage bucket + its own RLS. public=false means there is no
 --    unauthenticated URL for these bytes at all; every fetch is a signed URL.
+--    file_size_limit + allowed_mime_types make the 25 MiB cap and the type
+--    allowlist hold at the storage layer too, not only in the upload API.
 -- ----------------------------------------------------------------------------
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('documents', 'documents', false)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'documents', 'documents', false, 26214400,
+  ARRAY['application/pdf', 'image/png', 'image/jpeg', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE
+  SET file_size_limit    = EXCLUDED.file_size_limit,
+      allowed_mime_types = EXCLUDED.allowed_mime_types,
+      public             = EXCLUDED.public;
 
--- Provisioned accounts may READ objects (which is what lets them mint a signed URL);
--- admins may write. The predicate matches the table, so the two layers cannot drift.
+-- Object READ mirrors the table's VISIBILITY rule, so the two layers cannot drift and the
+-- direct-storage-API path (rep with anon key + own JWT) is closed: an admin may read any
+-- object; a rep may read an object ONLY if a currently-visible document row points at it.
+-- Hidden, scheduled, expired and orphaned files therefore have no reachable object for a rep.
 DROP POLICY IF EXISTS documents_obj_read ON storage.objects;
 CREATE POLICY documents_obj_read ON storage.objects
   FOR SELECT TO authenticated
-  USING (bucket_id = 'documents' AND public.is_provisioned());
+  USING (
+    bucket_id = 'documents'
+    AND (
+      COALESCE(public.is_admin(), false)
+      OR (public.is_provisioned() AND public.is_document_visible(name))
+    )
+  );
 
 DROP POLICY IF EXISTS documents_obj_admin_write ON storage.objects;
 CREATE POLICY documents_obj_admin_write ON storage.objects

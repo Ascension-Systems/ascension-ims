@@ -22,6 +22,8 @@
     "verify:login-predicate": "node verify/login-predicate.mjs",
     "verify:login-failure": "node verify/login-failure.mjs",
     "verify:disposition": "node verify/disposition.mjs",
+    "verify:documents": "node verify/hosted/documents.mjs",
+    "seed:documents": "node scripts/seed-documents.mjs",
     "check:disposition": "node verify/disposition.mjs --check",
     "check:secrets": "bash scripts/check-no-secrets.sh"
   },
