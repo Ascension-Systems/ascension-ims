@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { InviteForm } from '@/components/invite-form'
+import { ResetPassword } from '@/components/reset-password'
 import { RelativeTime } from '@/components/relative-time'
 import { AppNav } from '@/components/app-nav'
 import styles from '@/app/reconciliation/page.module.css'
@@ -91,6 +92,8 @@ export default async function TeamPage() {
                   </dd>
                 </div>
               </dl>
+              {/* Reset is only meaningful once someone has an account — i.e. has claimed. */}
+              {r.claimed_at ? <ResetPassword email={r.email} /> : null}
             </li>
           ))}
         </ul>
