@@ -10,7 +10,7 @@
   background: rgba(8, 18, 30, 0.55);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: fadeIn var(--dur-2) var(--ease-out) both;
+  /* Enter/exit handled by framer-motion (AnimatePresence) — see doc-viewer.tsx. */
 }
 
 .panel {
