@@ -130,7 +130,13 @@ export function JoinForm() {
       </div>
 
       <button type="submit" className={styles.submit} disabled={busy || !ready}>
-        {busy ? 'Setting up…' : 'Set up and sign in'}
+        {busy ? (
+          <>
+            <span className="spinner" aria-hidden="true" /> Setting up…
+          </>
+        ) : (
+          'Set up and sign in'
+        )}
       </button>
 
       {error ? (

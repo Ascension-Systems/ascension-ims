@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { signIn } from './actions'
 import { BrandMark } from '@/components/logo'
+import { SubmitButton } from '@/components/submit-button'
 import styles from '../message.module.css'
 
 export const dynamic = 'force-dynamic'
@@ -72,9 +73,9 @@ export default async function LoginPage({
             required
           />
         </div>
-        <button type="submit" className={styles.submit}>
+        <SubmitButton className={styles.submit} pendingLabel="Signing in…">
           Sign in
-        </button>
+        </SubmitButton>
       </form>
 
       <p className={styles.subtle}>

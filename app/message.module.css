@@ -166,3 +166,23 @@
   font-size: var(--text-label);
   color: var(--ink-faint);
 }
+
+/* Polish (2026-08-21): primary actions get depth (a subtle navy gradient + accent glow) and a
+   hover lift; inputs get an accent focus ring so a tap visibly "takes". */
+.submit,
+.action {
+  background-image: linear-gradient(180deg, #114467 0%, var(--accent) 58%, var(--accent-deep) 100%);
+  box-shadow: var(--glow-accent);
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .submit:hover,
+  .action:hover {
+    box-shadow: var(--shadow-pop);
+    transform: translateY(-1px);
+  }
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint), var(--shadow-card);
+  outline: none;
+}

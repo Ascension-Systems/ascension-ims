@@ -141,7 +141,13 @@ export function CommitForm({
           />
         </div>
         <button type="submit" className={styles.submit} disabled={busy || !qtyValid}>
-          {busy ? 'Recording…' : 'Commit'}
+          {busy ? (
+            <>
+              <span className="spinner" aria-hidden="true" /> Recording…
+            </>
+          ) : (
+            'Commit'
+          )}
         </button>
       </div>
 
