@@ -78,3 +78,6 @@
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* Motion (2026-08-21): the hero figure — the number a rep quotes — pops in. */
+.figure { animation: popIn var(--dur-3) var(--ease-spring) both; animation-delay: 120ms; }

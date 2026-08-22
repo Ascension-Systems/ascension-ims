@@ -173,3 +173,15 @@
   font-size: var(--text-components);
   color: var(--ink-faint);
 }
+
+/* Motion (2026-08-21): lift on hover, animated detail reveal. Only transition/transform/
+   animation are set here — never border/background shorthand — so the status left-rule and
+   the Low gradient owned by the global .rule* classes are untouched. */
+.card {
+  transition: box-shadow var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .card:hover { box-shadow: var(--shadow-float); transform: translateY(-2px); }
+}
+.details { animation: slideDown var(--dur-3) var(--ease-out) both; }
+.override { animation: slideDown var(--dur-3) var(--ease-out) both; animation-delay: 60ms; }

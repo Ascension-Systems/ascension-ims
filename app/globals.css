@@ -306,3 +306,100 @@ a {
   outline: var(--border-width) dashed var(--ink-faint);
   outline-offset: -3px;
 }
+
+/* ==========================================================================
+   MOTION SYSTEM (2026-08-21) — elevates the UI from deliberately-static to a
+   polished, animated product. Supersedes the "no keyframes, no decorative
+   animation" note above, by Human decision: the restrained version read as
+   unimpressive. Every accessibility floor is kept, and ALL motion is
+   neutralised under prefers-reduced-motion at the very bottom of this block.
+   ========================================================================== */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 130ms;
+  --dur-2: 220ms;
+  --dur-3: 340ms;
+  --dur-4: 520ms;
+
+  --shadow-float: 0 4px 12px rgba(28, 25, 23, 0.08), 0 14px 34px rgba(28, 25, 23, 0.10);
+  --shadow-pop: 0 6px 16px rgba(10, 44, 77, 0.16), 0 18px 44px rgba(10, 44, 77, 0.16);
+  --glow-accent: 0 8px 22px rgba(10, 44, 77, 0.22);
+}
+
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes popIn    { 0% { opacity: 0; transform: scale(0.7); } 60% { transform: scale(1.06); } 100% { opacity: 1; transform: none; } }
+@keyframes shimmer  { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes spin     { to { transform: rotate(360deg); } }
+@keyframes slideDown{ from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes riseGlow { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes sweep    { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* --- Page + content entrance. Every page fades in; the top-level blocks of a
+   <main> rise in with a short stagger, so a screen assembles rather than snaps. --- */
+main { animation: fadeIn var(--dur-2) var(--ease-out) both; }
+main > * { animation: fadeInUp var(--dur-3) var(--ease-out) both; }
+main > *:nth-child(1) { animation-delay: 40ms; }
+main > *:nth-child(2) { animation-delay: 90ms; }
+main > *:nth-child(3) { animation-delay: 140ms; }
+main > *:nth-child(4) { animation-delay: 190ms; }
+main > *:nth-child(5) { animation-delay: 240ms; }
+main > *:nth-child(n+6) { animation-delay: 280ms; }
+
+/* --- Reusable helpers --- */
+.animateIn { animation: fadeInUp var(--dur-3) var(--ease-out) both; }
+.popIn { animation: popIn var(--dur-3) var(--ease-spring) both; }
+
+/* Loading spinner for any pending action. Inherits currentColor. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.62s linear infinite;
+  vertical-align: -0.15em;
+}
+
+/* Shimmering skeleton placeholder for data that is loading. */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-sunk) 25%, var(--line-soft) 37%, var(--surface-sunk) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+  color: transparent;
+}
+
+/* --- Richer interactive feedback. Adds transform + a longer shadow ease to the
+   set the base sheet already transitions, so cards lift and buttons press. --- */
+@media (prefers-reduced-motion: no-preference) {
+  button, a, input, textarea, select, .statusBadge {
+    transition:
+      background-color var(--dur-1) ease,
+      border-color var(--dur-1) ease,
+      box-shadow var(--dur-2) var(--ease-out),
+      transform var(--dur-2) var(--ease-out),
+      color var(--dur-1) ease;
+  }
+}
+
+/* A press is felt on every button and link-button. */
+button:active:not(:disabled) { transform: scale(0.97); }
+
+/* Disabled controls read as disabled, calmly. */
+button:disabled { opacity: 0.55; cursor: default; }
+
+/* --- Accessibility floor: strip all decorative motion for users who ask. --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -112,3 +112,13 @@
   outline: 2px solid var(--accent-deep);
   outline-offset: 2px;
 }
+
+/* Motion (2026-08-21): the header settles in, the navy→cyan brand rule sweeps across on load
+   (the logo's gradient, animated), and the active tab carries a soft accent glow. */
+.bar { animation: fadeIn var(--dur-2) var(--ease-out) both; }
+.brand { animation: fadeInUp var(--dur-3) var(--ease-out) 60ms both; }
+.bar::after { transform-origin: left center; animation: sweep var(--dur-4) var(--ease-out) 140ms both; }
+.tabActive, .tabActive:hover { box-shadow: var(--glow-accent); }
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .tab:hover { transform: translateY(-1px); }
+}
