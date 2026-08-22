@@ -81,6 +81,12 @@ Without it the login form fails closed with the "cannot send" page — deliberat
 | `npm run lint` | ESLint, including the service-role import restriction |
 | `npm run seed:generate` | regenerates `supabase/seed/0001` and `0002` (deterministic) |
 | `npm run icons:generate` | regenerates the PWA icons (deterministic) |
+| `npm run check:all` | **the standing build checks** — encoding, sql, routes, secrets. Runs automatically before `npm run verify` |
+| `npm run check:selftest` | validates each standing check against a planted instance of the defect it targets |
+| `npm run check:encoding` | non-printable bytes (shared implementation, `tools/check-encoding.sh`) |
+| `npm run check:sql` | migrations referencing an object a later migration creates |
+| `npm run check:routes` | navigation targets that resolve to nothing |
+| `npm run check:secrets` | repo hygiene: nothing key- or credential-shaped is checked in |
 | `npm run verify:preflight` | read-only check of what the hosted project is missing. Creates nothing |
 | `npm run verify:identities` | creates the two test identities on the hosted project |
 | `npm run verify` | **the four verification attacks, against the configured hosted project** |
@@ -179,6 +185,22 @@ Without it those three assertions print `NOT EXECUTED` and say why. They are nev
 passes and never silently omitted.
 
 ---
+
+### The standing checks, and why they self-test
+
+`check:sql`, `check:routes` and `check:encoding` are required of every project in this pipeline.
+They are wired into `verify` through npm's `preverify` hook, so they run before the hosted attack
+suite rather than depending on anyone remembering them.
+
+Each one ships a `--self-test` that plants the exact defect it exists to catch, asserts it is
+caught, removes it, and asserts the tree is clean again. **A sweep reporting "zero found" and a
+sweep that never ran are indistinguishable from the outside**, and that is not hypothetical here:
+writing `check:routes` produced a version that caught three of its four supported link forms and
+silently missed `.push()`. The self-test is what surfaced it; the passing run did not.
+
+`check:routes` reports its own scope on every run — files read, routes known, targets found, and
+how each target was accounted for (resolved / broken / skipped). If that count drops, the check
+has stopped reaching something, and a smaller number is not a better result.
 
 ## Running this against the hosted Supabase project
 
