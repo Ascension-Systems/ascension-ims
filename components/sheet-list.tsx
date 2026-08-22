@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { DocActions } from './doc-actions'
+import { DocViewer } from './doc-viewer'
 import styles from './sheet-list.module.css'
 
 type Sheet = {
@@ -68,14 +69,7 @@ export function SheetList({ items, isAdmin }: { items: Sheet[]; isAdmin: boolean
                   {hidden ? <span className={styles.hiddenTag}>Hidden from reps</span> : null}
                 </div>
                 <div className={styles.actions}>
-                  <a
-                    className={styles.viewBtn}
-                    href={`/api/documents/${s.id}/file`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View
-                  </a>
+                  <DocViewer id={s.id} title={s.title} triggerClassName={styles.viewBtn} />
                   {isAdmin ? <DocActions id={s.id} active={s.active} /> : null}
                 </div>
               </li>

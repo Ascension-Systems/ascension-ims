@@ -4,6 +4,7 @@ import { AppNav } from '@/components/app-nav'
 import { DocumentUpload } from '@/components/document-upload'
 import { SheetList } from '@/components/sheet-list'
 import { DocActions } from '@/components/doc-actions'
+import { DocViewer } from '@/components/doc-viewer'
 import styles from './page.module.css'
 
 /**
@@ -66,14 +67,7 @@ export default async function ResourcesPage() {
                     {hidden ? <span className={styles.hiddenTag}>Hidden from reps</span> : null}
                   </div>
                   <div className={styles.promoActions}>
-                    <a
-                      className={styles.viewBtn}
-                      href={`/api/documents/${d.id}/file`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      View
-                    </a>
+                    <DocViewer id={d.id} title={d.title} triggerClassName={styles.viewBtn} />
                     {isAdmin ? <DocActions id={d.id} active={d.active} /> : null}
                   </div>
                 </li>
