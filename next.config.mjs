@@ -94,7 +94,11 @@ const SECURITY_HEADERS = [
    */
   {
     key: 'Content-Security-Policy',
-    value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+    // frame-ancestors 'self' (was 'none'): the in-app document viewer (DocViewer) embeds the
+    // same-origin /api/documents/[id]/file endpoint in an <iframe>; 'none' blocked the app from
+    // framing its own content. 'self' still blocks EXTERNAL sites from framing us (clickjacking
+    // protection intact) — only our own origin may frame our pages/files.
+    value: "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'",
   },
 ]
 
