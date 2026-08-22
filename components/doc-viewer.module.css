@@ -24,7 +24,7 @@
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-pop);
-  animation: scaleIn var(--dur-3) var(--ease-out) both;
+  /* Enter/exit handled by framer-motion (AnimatePresence) — see doc-viewer.tsx. */
 }
 
 .head {
