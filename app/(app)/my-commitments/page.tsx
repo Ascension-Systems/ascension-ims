@@ -1,8 +1,7 @@
 import { requireUser } from '@/lib/auth'
 import { getMyCommitments, namesForSkus } from '@/lib/commitments'
 import { RelativeTime } from '@/components/relative-time'
-import { AppNav } from '@/components/app-nav'
-import styles from '@/app/reconciliation/page.module.css'
+import styles from '@/app/(app)/reconciliation/page.module.css'
 
 /**
  * A rep's own book: the stock they have spoken for. Reps can record a commitment anywhere in
@@ -27,7 +26,6 @@ export default async function MyCommitmentsPage() {
 
   return (
     <main className={styles.main}>
-      <AppNav role="rep" />
 
       <div className={styles.intro}>
         <p className={styles.eyebrow}>Yours</p>

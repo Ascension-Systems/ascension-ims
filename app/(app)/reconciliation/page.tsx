@@ -3,7 +3,6 @@ import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { getPendingCommitments, namesForSkus } from '@/lib/commitments'
 import { RelativeTime } from '@/components/relative-time'
-import { AppNav } from '@/components/app-nav'
 import { SyncButton } from '@/components/sync-button'
 import styles from './page.module.css'
 
@@ -50,7 +49,6 @@ export default async function ReconciliationPage() {
 
   return (
     <main className={styles.main}>
-      <AppNav role="admin" />
 
       <div className={styles.intro}>
         <p className={styles.eyebrow}>Admin</p>

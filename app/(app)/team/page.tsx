@@ -4,8 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { InviteForm } from '@/components/invite-form'
 import { ResetPassword } from '@/components/reset-password'
 import { RelativeTime } from '@/components/relative-time'
-import { AppNav } from '@/components/app-nav'
-import styles from '@/app/reconciliation/page.module.css'
+import styles from '@/app/(app)/reconciliation/page.module.css'
 
 /**
  * Admin: the rep roster and the enrollment code.
@@ -43,7 +42,6 @@ export default async function TeamPage() {
 
   return (
     <main className={styles.main}>
-      <AppNav role="admin" />
 
       <div className={styles.intro}>
         <p className={styles.eyebrow}>Admin</p>

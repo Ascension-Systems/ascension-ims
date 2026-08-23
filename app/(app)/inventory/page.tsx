@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { getSettings } from '@/lib/settings'
 import { categoriesOf, getInventory } from '@/lib/inventory'
 import { InventoryList } from '@/components/inventory-list'
-import { AppNav } from '@/components/app-nav'
 import styles from './page.module.css'
 
 /**
@@ -54,7 +53,6 @@ export default async function InventoryPage() {
 
   return (
     <main className={styles.main}>
-      <AppNav role={viewerRole} />
 
       <div className={styles.intro}>
         <h1 className={styles.title}>Inventory</h1>

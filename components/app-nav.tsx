@@ -1,6 +1,7 @@
 'use client'
 
-import Link, { useLinkStatus } from 'next/link'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SignOutButton } from './sign-out-button'
 import { BrandMark } from './logo'
@@ -9,29 +10,15 @@ import styles from './app-nav.module.css'
 type Role = 'rep' | 'admin'
 
 /**
- * Acknowledges a tab tap the instant it happens. Tapping a tab triggers a server-rendered page
- * load (auth + data), so without this the tab sat dead for the round-trip. useLinkStatus (Next
- * 15.3+) reports THIS link's pending navigation; we show a small spinner in the tapped tab until
- * the new page arrives. Must render inside the <Link>.
- */
-function TabStatus() {
-  const { pending } = useLinkStatus()
-  return pending ? <span className={styles.tabSpinner} aria-hidden="true" /> : null
-}
-
-/**
- * The one navigation bar, shown identically on every signed-in screen. Before this, each page
- * carried its own ad-hoc header and a different scatter of links, so moving between screens meant
- * re-learning where the buttons were on each one. Now there is a single top bar: the app name,
- * the pages you can reach as tabs, and sign out — always in the same place.
+ * The one navigation bar, shown identically on every signed-in screen. Rendered once by the
+ * signed-in layout (app/(app)/layout.tsx) so it stays fixed across navigations rather than
+ * re-mounting per page.
  *
  * The active tab is filled, not just tinted: which screen you are on is carried by weight and
  * shape, not colour alone, so it survives a colourblind viewer and a greyscale screenshot.
  *
- * Each role sees only the screens it uses: a rep gets Inventory and their own commitments; an
- * admin gets Inventory, the reconciliation queue, and team access. The set is filtered here for
- * legibility only; the database is the real gate — a rep who types /reconciliation is bounced by
- * the page and would read nothing even if they weren't.
+ * Each role sees only the screens it uses. The set is filtered here for legibility only; the
+ * database is the real gate — a rep who types /reconciliation is bounced by the page.
  */
 const PAGES: { href: string; label: string; roles: Role[] }[] = [
   { href: '/inventory', label: 'Inventory', roles: ['rep', 'admin'] },
@@ -44,6 +31,14 @@ const PAGES: { href: string; label: string; roles: Role[] }[] = [
 export function AppNav({ role }: { role: Role }) {
   const pathname = usePathname()
   const pages = PAGES.filter((p) => p.roles.includes(role))
+
+  // Optimistic active tab: the instant a tab is tapped it takes the active (filled) style, before
+  // the server-rendered page finishes loading — so a tap gives immediate colour feedback with NO
+  // layout shift (no spinner widening the row). Cleared once the new path lands.
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
 
   return (
     <header className={styles.bar}>
@@ -58,16 +53,18 @@ export function AppNav({ role }: { role: Role }) {
       {pages.length > 1 ? (
         <nav className={styles.tabs} aria-label="Pages">
           {pages.map((p) => {
-            const active = pathname === p.href || pathname.startsWith(`${p.href}/`)
+            const active = pendingHref
+              ? pendingHref === p.href
+              : pathname === p.href || pathname.startsWith(`${p.href}/`)
             return (
               <Link
                 key={p.href}
                 href={p.href}
+                onClick={() => setPendingHref(p.href)}
                 className={active ? `${styles.tab} ${styles.tabActive}` : styles.tab}
                 aria-current={active ? 'page' : undefined}
               >
                 {p.label}
-                <TabStatus />
               </Link>
             )
           })}

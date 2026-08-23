@@ -1,6 +1,5 @@
 import { getProfile, requireUser } from '@/lib/auth'
 import { getPromotions, getSheets, productNamesFor } from '@/lib/documents'
-import { AppNav } from '@/components/app-nav'
 import { DocumentUpload } from '@/components/document-upload'
 import { SheetList } from '@/components/sheet-list'
 import { DocActions } from '@/components/doc-actions'
@@ -35,7 +34,6 @@ export default async function ResourcesPage() {
 
   return (
     <main className={styles.main}>
-      <AppNav role={role} />
 
       <div className={styles.intro}>
         <p className={styles.eyebrow}>Resources</p>
