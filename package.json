@@ -38,7 +38,8 @@
     "check:encoding:selftest": "sh ../../tools/check-encoding.sh --self-test",
     "check:all": "npm run check:encoding && npm run check:sql && npm run check:routes && npm run check:secrets",
     "check:selftest": "npm run check:encoding:selftest && npm run check:sql:selftest && npm run check:routes:selftest",
-    "preverify": "npm run check:all"
+    "preverify": "npm run check:all",
+    "seed:flyers": "node scripts/seed-flyers.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^8.0.4",
