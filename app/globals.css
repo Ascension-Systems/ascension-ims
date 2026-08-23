@@ -101,10 +101,16 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Paint the root paper so the iOS/WKWebView overscroll (rubber-band) area shows paper, not the
+     webview's black backdrop. */
+  background: var(--paper);
+  min-height: 100%;
 }
 
 body {
   margin: 0;
+  /* Fill the viewport so a short page never leaves a black gap below the content. */
+  min-height: 100dvh;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-body);
@@ -112,7 +118,9 @@ body {
   line-height: 1.5;
   font-feature-settings: 'ss01' on;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior-y: none;
+  /* Allow the natural rubber-band bounce (was 'none', which caused a hard stop). Modals still
+     lock body scroll while open, so nothing bounces behind them. */
+  overscroll-behavior-y: auto;
 }
 
 /* Restrained motion: short, purposeful feedback on interactive elements only.

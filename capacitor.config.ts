@@ -17,6 +17,10 @@ const config: CapacitorConfig = {
   appId: 'com.ascensionitai.inventory',
   appName: 'AIT IMS',
   webDir: 'native-shell/www',
+  // Paper (#fbfaf7), matching the web --paper. Sets the native WebView/scroll-view background so
+  // the iOS rubber-band overscroll area shows paper instead of the default black. Takes effect on
+  // the next Xcode build (native-level); the CSS html/body background handles the web layer live.
+  backgroundColor: '#fbfaf7',
   server: {
     // A real https origin makes the WebView load the live app. cleartext stays false so only
     // https is ever loaded (App Transport Security). No trailing slash, no path.
@@ -25,6 +29,7 @@ const config: CapacitorConfig = {
   },
   ios: {
     contentInset: 'always',
+    backgroundColor: '#fbfaf7',
   },
 }
 
