@@ -84,23 +84,22 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: var(--space-3);
   background: var(--surface-sunk);
-  overflow: hidden;
+  /* Scrollable WITHIN the popup; contain so scrolling the flyer never drags the page behind it. */
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* The document is an image, scaled to fit ENTIRELY within the container — whole flyer visible,
-   no crop, no scroll. */
+/* The document image fills the width (capped so it isn't huge on desktop) at its natural height,
+   so you scroll down to read the whole flyer rather than it being shrunk to an unreadable fit. */
 .frame {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
   display: block;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
   border: 0;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
