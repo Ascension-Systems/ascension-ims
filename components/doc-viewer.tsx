@@ -83,7 +83,14 @@ export function DocViewer({
                   <span className="spinner" aria-hidden="true" /> Loading…
                 </div>
               ) : null}
-              <iframe className={styles.frame} src={fileUrl} title={title} onLoad={() => setLoading(false)} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className={styles.frame}
+                src={fileUrl}
+                alt={title}
+                onLoad={() => setLoading(false)}
+                onError={() => setLoading(false)}
+              />
             </div>
           </div>
         </div>
