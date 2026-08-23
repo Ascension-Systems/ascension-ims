@@ -113,3 +113,21 @@
 @media (prefers-reduced-motion: no-preference) and (hover: hover) {
   .tab:hover { transform: translateY(-1px); }
 }
+
+/* Instant tap feedback on a nav tab: a small spinner appears in the tapped tab while its page
+   loads (see TabStatus / useLinkStatus in app-nav.tsx). Inherits the tab's text colour, so it's
+   dark on an inactive tab and light on the active one. */
+.tabSpinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-left: var(--space-2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabSpinner { animation-duration: 0.001ms; }
+}

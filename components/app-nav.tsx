@@ -1,12 +1,23 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SignOutButton } from './sign-out-button'
 import { BrandMark } from './logo'
 import styles from './app-nav.module.css'
 
 type Role = 'rep' | 'admin'
+
+/**
+ * Acknowledges a tab tap the instant it happens. Tapping a tab triggers a server-rendered page
+ * load (auth + data), so without this the tab sat dead for the round-trip. useLinkStatus (Next
+ * 15.3+) reports THIS link's pending navigation; we show a small spinner in the tapped tab until
+ * the new page arrives. Must render inside the <Link>.
+ */
+function TabStatus() {
+  const { pending } = useLinkStatus()
+  return pending ? <span className={styles.tabSpinner} aria-hidden="true" /> : null
+}
 
 /**
  * The one navigation bar, shown identically on every signed-in screen. Before this, each page
@@ -56,6 +67,7 @@ export function AppNav({ role }: { role: Role }) {
                 aria-current={active ? 'page' : undefined}
               >
                 {p.label}
+                <TabStatus />
               </Link>
             )
           })}
