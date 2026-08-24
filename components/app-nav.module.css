@@ -63,26 +63,34 @@
    narrow phone never clips a destination. */
 .tabs {
   display: flex;
-  /* WRAP, not a hidden scroll strip. A nowrap + overflow-x:auto version clipped the 4th admin
-     tab (Team) off the right edge with no scroll affordance — an admin literally could not see
-     or reach it. All tabs must always be visible; one extra row on a phone is the right trade. */
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  /* ONE ROW that FITS — no wrap, no horizontal scroll. On a phone the tabs share the width
+     equally and shrink to fit (see .tab flex + font), so every destination stays visible
+     without a second row or a hidden scroll strip. Wider screens revert to natural pills. */
+  flex-wrap: nowrap;
+  gap: 6px;
   padding: 0 var(--space-3) var(--space-3);
 }
 
 .tab {
-  flex: 0 0 auto;
+  /* Share the row equally and shrink to fit; min-width:0 lets a long label narrow rather than
+     push the row past the screen edge. */
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   white-space: nowrap;
+  overflow: hidden;
   min-height: var(--tap-chip);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-pill);
   border: var(--border-width) solid var(--line);
   background: var(--surface);
   font-family: var(--font-body);
-  font-size: 15px;
+  /* Small enough that four tabs incl. "Reconciliation" fit one 375px row; grows on desktop. */
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
   font-weight: 600;
   line-height: 1;
   color: var(--ink-soft);
@@ -91,6 +99,20 @@
     background-color 120ms ease,
     color 120ms ease,
     border-color 120ms ease;
+}
+
+/* Roomy screens: natural-width pills, larger text — the fit constraint is a phone concern. */
+@media (min-width: 560px) {
+  .tabs {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .tab {
+    flex: 0 0 auto;
+    padding: 0 var(--space-4);
+    font-size: 15px;
+    letter-spacing: normal;
+  }
 }
 
 .tab:hover {
