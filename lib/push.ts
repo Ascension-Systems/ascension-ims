@@ -103,6 +103,7 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
   const worker = async () => {
     while (i < tokens.length) {
       const t = tokens[i++]
+      if (t === undefined) break
       try {
         let r = await sendOne(t, note, PROD_HOST)
         // A dev build's token is a sandbox token; production says BadDeviceToken. Retry there.
