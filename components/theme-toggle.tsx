@@ -4,6 +4,21 @@ import { useEffect, useState } from 'react'
 import styles from './icon-button.module.css'
 
 /**
+ * Tell the iOS native shell about the current theme so its overscroll gutter (painted natively,
+ * outside the WebView's reach) follows the in-app choice. No-op in a plain browser. See
+ * ios/App/App/SceneDelegate.swift (ThemeBridge).
+ */
+function notifyNativeTheme(theme: 'light' | 'dark') {
+  try {
+    ;(window as unknown as {
+      webkit?: { messageHandlers?: { theme?: { postMessage(v: string): void } } }
+    }).webkit?.messageHandlers?.theme?.postMessage(theme)
+  } catch {
+    /* not in the native shell */
+  }
+}
+
+/**
  * Circular light/dark toggle, sized to match the sign-out button beside it. The actual theme is
  * already set on <html data-theme> before paint by the no-flash script in app/layout.tsx; this
  * only reads that attribute on mount (so the icon matches) and flips it on click, persisting the
@@ -17,6 +32,7 @@ export function ThemeToggle() {
     const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
     setTheme(current)
     setReady(true)
+    notifyNativeTheme(current) // sync the native shell's gutter to the current theme on mount
   }, [])
 
   const toggle = () => {
@@ -27,6 +43,7 @@ export function ThemeToggle() {
     } catch {
       /* private mode — the choice just won't persist across reloads */
     }
+    notifyNativeTheme(next) // tell the iOS shell so the overscroll gutter follows the choice
     setTheme(next)
   }
 

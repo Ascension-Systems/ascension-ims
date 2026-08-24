@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             updates the same attribute + localStorage at runtime. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t;try{window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.theme&&window.webkit.messageHandlers.theme.postMessage(t)}catch(e){}}catch(e){}})()`,
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
