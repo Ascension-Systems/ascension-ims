@@ -57,11 +57,17 @@ async function main() {
       ['POST', '/api/invites', { emails: 'x@example.invalid' }],
       ['PATCH', '/api/inventory', { sku: 'SEA-9007', qty_on_hand: 0 }],
       ['GET', '/api/documents/00000000-0000-0000-0000-000000000000/file'],
+      ['POST', '/api/push/register', { token: 'deadbeef'.repeat(8) }],
+      ['POST', '/api/announce', { message: 'intruder broadcast' }],
     ]
     for (const [m, p, b] of cases) {
       const r = await head(p, m, b)
       ok(r.status === 401, `unauth ${m} ${p} -> 401`, `got ${r.status}`)
     }
+    // The digest endpoint is cron-called (no session), so its gate is the shared secret,
+    // not a cookie: no secret (or a wrong one) must be a 403, never a send.
+    const digest = await head('/api/push/digest', 'POST')
+    ok(digest.status === 403, 'unauth POST /api/push/digest (no cron secret) -> 403', `got ${digest.status}`)
   }
 
   console.log('\nEnrollment endpoint is public BUT gated (a wrong code/email is refused, not enrolled):')

@@ -12,9 +12,11 @@
     "packageJson": {
       "dependencies": [
         "npm:@capacitor/assets@^3.0.5",
+        "npm:@capacitor/browser@^8.0.4",
         "npm:@capacitor/cli@^8.5.0",
         "npm:@capacitor/core@^8.5.0",
         "npm:@capacitor/ios@^8.5.0",
+        "npm:@capacitor/push-notifications@^8.1.2",
         "npm:@supabase/ssr@0.12.4",
         "npm:@supabase/supabase-js@2.112.3",
         "npm:@types/node@22.20.1",
@@ -23,6 +25,7 @@
         "npm:embedded-postgres@18.4.0-beta.17",
         "npm:eslint-config-next@15.5.23",
         "npm:eslint@8.57.1",
+        "npm:framer-motion@^13.1.1",
         "npm:next@15.5.23",
         "npm:pg@8.23.0",
         "npm:react-dom@19.2.8",

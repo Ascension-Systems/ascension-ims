@@ -26,6 +26,10 @@ const PUBLIC_PATHS = [
   // one identical message so it cannot be used to enumerate the roster.
   '/join',
   '/api/enroll',
+  // The digest is called by the scheduled Netlify function, which has no session cookie and
+  // never will. It is not unguarded: the route itself refuses (403) any caller that does not
+  // present the PUSH_CRON_SECRET header, and when push is unconfigured it is a no-op.
+  '/api/push/digest',
 ]
 
 const isPublic = (pathname: string) =>
