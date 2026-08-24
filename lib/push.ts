@@ -210,8 +210,11 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
       if (t === undefined) break
       try {
         let r = await sendOnSession(prod, t, note)
-        // A dev build's token is a sandbox token; production says BadDeviceToken. Retry there.
-        if (!r.ok && r.reason === 'BadDeviceToken') r = await sendOnSession(getSandbox(), t, note)
+        // A debug/TestFlight-sandbox token, or a sandbox-restricted key, makes production reply
+        // BadDeviceToken or BadEnvironmentKeyInToken. Either way the sandbox host is the answer.
+        if (!r.ok && (r.reason === 'BadDeviceToken' || r.reason === 'BadEnvironmentKeyInToken')) {
+          r = await sendOnSession(getSandbox(), t, note)
+        }
         if (!r.ok && (r.reason === 'BadDeviceToken' || r.reason === 'Unregistered' || r.reason === 'ExpiredToken')) {
           dead.push(t)
         } else if (!r.ok) {
