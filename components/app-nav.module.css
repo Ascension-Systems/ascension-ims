@@ -42,10 +42,18 @@
 }
 
 .mark {
-  height: 26px;
-  width: auto;
-  display: block;
+  /* A fixed light disc behind the mark. The logo PNG has faint white anti-alias fringing that
+     showed as "wispies" on the dark ground; clipping it into a white circle hides them in both
+     themes (they blend into the white) and reads as a clean app icon. */
+  width: 34px;
+  height: 34px;
   flex: none;
+  display: block;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  padding: 4px;
+  object-fit: contain;
 }
 
 .wordmark {
