@@ -70,15 +70,18 @@ export async function diagnoseApns(): Promise<Record<string, unknown>> {
     out.jwtError = e instanceof Error ? e.message : String(e)
     return out
   }
-  const session = openSession(PROD_HOST)
-  try {
-    const r = await sendOnSession(session, 'cafebabe'.repeat(8), { title: 'selftest', body: 'selftest', url: '/' })
-    out.apnsOk = r.ok
-    out.apnsReason = r.reason ?? 'ok'
-  } catch (e) {
-    out.sendError = e instanceof Error ? e.message : String(e)
-  } finally {
-    session.close()
+  const note: PushNote = { title: 'selftest', body: 'selftest', url: '/' }
+  const dummy = 'cafebabe'.repeat(8)
+  for (const [label, host] of [['prod', PROD_HOST], ['sandbox', SANDBOX_HOST]] as const) {
+    const session = openSession(host)
+    try {
+      const r = await sendOnSession(session, dummy, note)
+      out[`apns_${label}`] = r.ok ? 'ok' : r.reason
+    } catch (e) {
+      out[`apns_${label}`] = 'ERR ' + (e instanceof Error ? e.message : String(e))
+    } finally {
+      session.close()
+    }
   }
   return out
 }
