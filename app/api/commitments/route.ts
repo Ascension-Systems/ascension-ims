@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth'
 import { mapPostgresError, parseInsufficientAvailability } from '@/lib/errors'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { notifyAdmins, checkLowStock } from '@/lib/push'
 
 /**
  * POST -> record_commitment RPC.
@@ -127,6 +128,16 @@ export async function POST(request: Request) {
       // NOT mean another rep took it. Availability can be short simply because the source
       // figure is lower than the request. Asserting contention unconditionally produced a
       // message that contradicted the card two lines above it ("Committed by reps: 0").
+      // Demand signal for admins: a rep just tried to sell more than exists. The refusal
+      // above is the rep's answer; this is the office hearing about it.
+      await notifyAdmins(
+        {
+          title: 'Oversell refused',
+          body: `${profile.email ?? 'A rep'} asked for ${qty}× ${sku}; only ${available} available.`,
+          url: '/inventory',
+        },
+        user.id,
+      )
       return NextResponse.json(
         {
           error: 'INSUFFICIENT_AVAILABILITY',
@@ -147,6 +158,20 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: mapped.error, message: mapped.message }, { status: mapped.status })
   }
+
+  // Committed. Tell the admins (not the rep — they are looking at the confirmation), then
+  // check whether this commitment just pushed the line under the low-stock threshold.
+  // Both are fail-silent (lib/push.ts) and cannot un-record the commitment.
+  const loc = typeof location === 'string' && location ? location : 'default'
+  await notifyAdmins(
+    {
+      title: 'New commitment',
+      body: `${profile.email ?? 'A rep'} committed ${qty}× ${sku}.`,
+      url: '/reconciliation',
+    },
+    user.id,
+  )
+  await checkLowStock(sku, loc)
 
   return NextResponse.json({ commitment: data }, { status: 201 })
 }

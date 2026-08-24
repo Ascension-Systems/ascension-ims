@@ -45,6 +45,7 @@
     "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
+    "@capacitor/push-notifications": "^8.1.2",
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "framer-motion": "^13.1.1",

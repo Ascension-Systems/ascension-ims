@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { notifyEveryone } from '@/lib/push'
 
 /**
  * POST -> upload a document (admin only). Multipart: `file` plus metadata fields.
@@ -204,6 +205,17 @@ export async function POST(request: Request) {
       { status: isFk ? 400 : 500 },
     )
   }
+
+  // New sales material is broadcast news — every rep hears, promos loudest. Fail-silent;
+  // the upload above is already committed either way.
+  await notifyEveryone(
+    {
+      title: kind === 'promo' ? 'New promotion' : 'New resource',
+      body: title,
+      url: '/resources',
+    },
+    admin.profile.id,
+  )
 
   return NextResponse.json({ ok: true, id: insert.data.id }, { status: 201 })
 }

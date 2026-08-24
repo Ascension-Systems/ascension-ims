@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getProfile, requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { InviteForm } from '@/components/invite-form'
+import { AnnounceForm } from '@/components/announce-form'
 import { ResetPassword } from '@/components/reset-password'
 import { RelativeTime } from '@/components/relative-time'
 import styles from '@/app/(app)/reconciliation/page.module.css'
@@ -69,6 +70,8 @@ export default async function TeamPage() {
         repMaxUses={repCode?.max_uses ?? null}
         adminCode={adminCode?.code ?? null}
       />
+
+      <AnnounceForm />
 
       {rows.length > 0 ? (
         <ul className={styles.list}>

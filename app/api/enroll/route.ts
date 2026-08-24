@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
 import { headers } from 'next/headers'
+import { notifyAdmins } from '@/lib/push'
 
 /**
  * POST -> claim an invitation, set a password, and sign in. Self-serve onboarding for ~120 reps.
@@ -138,6 +139,13 @@ export async function POST(request: Request) {
       )
     }
   }
+
+  // Provisioned. Let the admins know the team grew — fail-silent, never blocks enrollment.
+  await notifyAdmins({
+    title: 'New team member',
+    body: `${cleanEmail} just set up their portal account.`,
+    url: '/team',
+  })
 
   // 3. Sign the new rep in with the password they just chose. The cookie-bound client sets the
   //    session cookies on THIS response, so the browser is logged in on arrival.

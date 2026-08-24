@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
+import { notifyUsers } from '@/lib/push'
 
 /**
  * Email + password sign-in.
@@ -96,6 +97,17 @@ export async function signIn(formData: FormData) {
     }
   } catch (e) {
     console.error('[login] clear_login_failures threw:', e)
+  }
+
+  // Security notice to the account's registered devices. If it was you, it's a shrug; if it
+  // wasn't, it's the fastest possible tell. Fail-silent, never blocks the sign-in.
+  const { data: sessionData } = await supabase.auth.getUser()
+  if (sessionData.user) {
+    await notifyUsers([sessionData.user.id], {
+      title: 'New sign-in',
+      body: 'Your account just signed in. If this was you, ignore this.',
+      url: '/inventory',
+    })
   }
 
   redirect('/inventory')

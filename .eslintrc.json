@@ -7,7 +7,7 @@
         "patterns": [
           {
             "group": ["**/lib/supabase/admin", "@/lib/supabase/admin"],
-            "message": "lib/supabase/admin.ts holds the service-role client and must never reach the browser. It may be imported only from app/api/** and lib/inventory-source.stub.ts (see the overrides block in this config)."
+            "message": "lib/supabase/admin.ts holds the service-role client and must never reach the browser. It may be imported only from app/api/**, app/login/actions.ts, lib/inventory-source.stub.ts, and lib/push.ts (see the overrides block in this config)."
           }
         ]
       }
@@ -15,7 +15,7 @@
   },
   "overrides": [
     {
-      "files": ["app/api/**/*.ts", "app/login/actions.ts", "lib/inventory-source.stub.ts"],
+      "files": ["app/api/**/*.ts", "app/login/actions.ts", "lib/inventory-source.stub.ts", "lib/push.ts"],
       "rules": {
         "no-restricted-imports": "off"
       }

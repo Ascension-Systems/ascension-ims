@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
 import { mapPostgresError } from '@/lib/errors'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { notifyEveryone, notifyRepsCommittedTo, checkLowStock } from '@/lib/push'
 
 /**
  * PATCH -> an ADMIN OVERRIDE of an inventory row. Build-order step 3.
@@ -117,6 +118,15 @@ export async function PATCH(request: Request) {
   const supabase = await createClient()
   const loc = typeof location === 'string' && location ? location : 'default'
 
+  // Read the prior figure FIRST, solely to detect a 0 -> >0 transition for the back-in-stock
+  // notification below. Advisory only: the update itself never branches on this value.
+  const { data: prior } = await supabase
+    .from('inventory')
+    .select('qty_on_hand')
+    .eq('sku', sku)
+    .eq('location', loc)
+    .maybeSingle()
+
   const patch: Record<string, unknown> = {
     qty_on_hand,
     source: 'manual_override',
@@ -150,6 +160,25 @@ export async function PATCH(request: Request) {
       { status: 404 },
     )
   }
+
+  // Notifications, all fail-silent, all after the correction is committed:
+  //   * back in stock (0 -> >0): every rep hears — that's sellable news for the whole floor.
+  //   * any other correction: only the reps holding live commitments on this sku, whose
+  //     quoted numbers just changed under them.
+  //   * low-stock check: the correction may itself have dropped the line under the threshold.
+  if (prior && prior.qty_on_hand === 0 && qty_on_hand > 0) {
+    await notifyEveryone(
+      { title: 'Back in stock', body: `${sku}: ${qty_on_hand} on hand.`, url: '/inventory' },
+      admin.profile.id,
+    )
+  } else {
+    await notifyRepsCommittedTo(
+      sku,
+      { title: 'Inventory corrected', body: `${sku} on hand is now ${qty_on_hand}: ${note.trim()}`, url: '/inventory' },
+      admin.profile.id,
+    )
+  }
+  await checkLowStock(sku, loc)
 
   return NextResponse.json({ inventory: data[0] }, { status: 200 })
 }

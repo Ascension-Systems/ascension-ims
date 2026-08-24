@@ -1,6 +1,7 @@
 import { requireUser, getProfile } from '@/lib/auth'
 import { AppNav } from '@/components/app-nav'
 import { ResumeRefresh } from '@/components/resume-refresh'
+import { PushRegister } from '@/components/push-register'
 
 /**
  * Shared layout for every signed-in screen. The nav is rendered HERE, once, so it stays fixed
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <ResumeRefresh />
+      <PushRegister />
       <AppNav role={role} />
       {children}
     </>
