@@ -30,5 +30,9 @@ CREATE POLICY push_tokens_delete_own ON public.push_tokens
 -- in the DB, not only in the route handler. Generous bounds (real APNs tokens are ~64–200 hex)
 -- so a legitimate device is never rejected — the per-user row cap in /api/push/register is what
 -- bounds volume; this only rejects non-token garbage.
+-- Length is a separate char_length() check, NOT a bounded {16,512} in the regex: Postgres's
+-- POSIX regex caps {m,n} repetition at 255, so {16,512} raises 2201B at INSERT time and blocks
+-- every registration. `^[0-9a-fA-F]+$` (unbounded) + char_length is equivalent and valid.
 ALTER TABLE public.push_tokens
-  ADD CONSTRAINT push_tokens_token_format CHECK (token ~ '^[0-9a-fA-F]{16,512}$');
+  ADD CONSTRAINT push_tokens_token_format
+  CHECK (token ~ '^[0-9a-fA-F]+$' AND char_length(token) BETWEEN 16 AND 512);
