@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit } from '@/lib/rate-limit'
@@ -206,16 +206,20 @@ export async function POST(request: Request) {
     )
   }
 
-  // New sales material is broadcast news — every rep hears, promos loudest. Fail-silent;
-  // the upload above is already committed either way.
-  await notifyEveryone(
-    {
-      title: kind === 'promo' ? 'New promotion' : 'New resource',
-      body: title,
-      url: '/resources',
-    },
-    admin.profile.id,
+  // New sales material is broadcast news — every rep hears, promos loudest. after() so the
+  // fleet-wide fan-out runs AFTER the 201: a slow APNs can't make the admin's upload appear to
+  // fail (and have them re-upload a duplicate). Fail-silent; the upload is already committed.
+  const docId = insert.data.id
+  after(() =>
+    notifyEveryone(
+      {
+        title: kind === 'promo' ? 'New promotion' : 'New resource',
+        body: title,
+        url: '/resources',
+      },
+      admin.profile.id,
+    ),
   )
 
-  return NextResponse.json({ ok: true, id: insert.data.id }, { status: 201 })
+  return NextResponse.json({ ok: true, id: docId }, { status: 201 })
 }

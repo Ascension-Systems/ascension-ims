@@ -26,7 +26,7 @@ import type { CommitmentState } from '@/lib/types'
 
 const PROD_HOST = 'https://api.push.apple.com'
 const SANDBOX_HOST = 'https://api.sandbox.push.apple.com'
-const CHUNK = 20 // concurrent APNs requests per batch
+const CONCURRENCY = 32 // in-flight APNs requests at once (worker-pool width)
 const JWT_TTL_MS = 45 * 60 * 1000 // Apple allows 20–60 min; refresh comfortably inside that
 
 export type PushNote = {
@@ -89,13 +89,21 @@ async function sendOne(deviceToken: string, note: PushNote, host: string): Promi
   return { ok: false, reason: body.reason ?? `HTTP ${res.status}` }
 }
 
-/** Send one note to a set of raw device tokens. Returns tokens APNs declared dead. */
+/**
+ * Send one note to a set of raw device tokens. Returns tokens APNs declared dead.
+ *
+ * A bounded worker pool sends up to CONCURRENCY devices at once rather than in strictly serial
+ * chunks — the old serial-chunk loop meant a 120-device broadcast with a hung APNs could take
+ * 6 × 10s = 60s. With the pool, worst case is ~one timeout window even for the whole fleet, and
+ * combined with off-request-path delivery (callers use `after()`) it never blocks a response.
+ */
 async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
   const dead: string[] = []
-  for (let i = 0; i < tokens.length; i += CHUNK) {
-    const batch = tokens.slice(i, i + CHUNK)
-    const settled = await Promise.allSettled(
-      batch.map(async (t) => {
+  let i = 0
+  const worker = async () => {
+    while (i < tokens.length) {
+      const t = tokens[i++]
+      try {
         let r = await sendOne(t, note, PROD_HOST)
         // A dev build's token is a sandbox token; production says BadDeviceToken. Retry there.
         if (!r.ok && r.reason === 'BadDeviceToken') r = await sendOne(t, note, SANDBOX_HOST)
@@ -103,20 +111,18 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
           dead.push(t)
         } else if (!r.ok) {
           // A rejected provider token means our cached JWT is bad — drop it so the next
-          // batch re-signs instead of repeating the failure for up to 45 minutes.
+          // send re-signs instead of repeating the failure for up to 45 minutes.
           if (r.reason === 'ExpiredProviderToken' || r.reason === 'InvalidProviderToken') invalidateJwt()
           console.error('[push] APNs refused:', r.reason)
         }
-      }),
-    )
-    // Surface the failure the fail-silent design would otherwise bury: a thrown sendOne
-    // (bad key, network, timeout) lands here as a rejection that nothing else logs.
-    for (const s of settled) {
-      if (s.status === 'rejected') {
-        console.error('[push] send threw:', s.reason instanceof Error ? s.reason.message : s.reason)
+      } catch (e) {
+        // Surface what the fail-silent design would otherwise bury: a thrown sendOne (bad key,
+        // network, timeout). Logged, never rethrown — one dead device can't stop the fan-out.
+        console.error('[push] send threw:', e instanceof Error ? e.message : e)
       }
     }
   }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tokens.length) }, worker))
   return dead
 }
 

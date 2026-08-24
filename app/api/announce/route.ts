@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { notifyEveryone, pushConfigured } from '@/lib/push'
@@ -49,6 +49,8 @@ export async function POST(request: Request) {
   }
 
   // The sender hears their own announcement too — deliberate: it is the proof it went out.
-  await notifyEveryone({ title: 'Announcement', body: message.trim(), url: '/inventory' })
+  // after() so a fleet-wide fan-out (up to 120 devices) runs past the response instead of
+  // risking the function timeout; the admin's own device still receives it moments later.
+  after(() => notifyEveryone({ title: 'Announcement', body: message.trim(), url: '/inventory' }))
   return NextResponse.json({ ok: true }, { status: 200 })
 }

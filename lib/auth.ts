@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
@@ -11,22 +12,26 @@ import type { Profile } from '@/lib/types'
  * a database refusal underneath it.
  */
 
-/** Always getUser(), never getSession(): getUser() revalidates with the auth server. */
-export async function getUser() {
+/**
+ * Always getUser(), never getSession(): getUser() revalidates with the auth server.
+ *
+ * Wrapped in React cache() so the layout and the page it renders — which both call requireUser()
+ * and getProfile() — share ONE revalidation per request instead of each firing its own GoTrue
+ * round trip. On an authenticated nav that collapsed ~5 sequential auth calls to 1–2.
+ */
+export const getUser = cache(async () => {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   return user
-}
+})
 
-export async function getProfile(): Promise<Profile | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export const getProfile = cache(async (): Promise<Profile | null> => {
+  const user = await getUser()
   if (!user) return null
 
+  const supabase = await createClient()
   const { data } = await supabase
     .from('profiles')
     .select('id, email, role, created_at')
@@ -34,7 +39,7 @@ export async function getProfile(): Promise<Profile | null> {
     .maybeSingle()
 
   return (data as Profile | null) ?? null
-}
+})
 
 /** Redirects to /login when there is no session. Used by pages. */
 export async function requireUser() {

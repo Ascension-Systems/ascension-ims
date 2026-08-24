@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
 import { mapPostgresError } from '@/lib/errors'
@@ -161,24 +161,27 @@ export async function PATCH(request: Request) {
     )
   }
 
-  // Notifications, all fail-silent, all after the correction is committed:
+  // Notifications, all fail-silent, all via after() so a broadcast fan-out (back-in-stock can
+  // reach every rep) runs AFTER the 200 and never delays or times out the admin's correction:
   //   * back in stock (0 -> >0): every rep hears — that's sellable news for the whole floor.
   //   * any other correction: only the reps holding live commitments on this sku, whose
   //     quoted numbers just changed under them.
   //   * low-stock check: the correction may itself have dropped the line under the threshold.
-  if (prior && prior.qty_on_hand === 0 && qty_on_hand > 0) {
-    await notifyEveryone(
-      { title: 'Back in stock', body: `${sku}: ${qty_on_hand} on hand.`, url: '/inventory' },
-      admin.profile.id,
-    )
-  } else {
-    await notifyRepsCommittedTo(
-      sku,
-      { title: 'Inventory corrected', body: `${sku} on hand is now ${qty_on_hand}: ${note.trim()}`, url: '/inventory' },
-      admin.profile.id,
-    )
-  }
-  await checkLowStock(sku, loc)
+  after(async () => {
+    if (prior && prior.qty_on_hand === 0 && qty_on_hand > 0) {
+      await notifyEveryone(
+        { title: 'Back in stock', body: `${sku}: ${qty_on_hand} on hand.`, url: '/inventory' },
+        admin.profile.id,
+      )
+    } else {
+      await notifyRepsCommittedTo(
+        sku,
+        { title: 'Inventory corrected', body: `${sku} on hand is now ${qty_on_hand}: ${note.trim()}`, url: '/inventory' },
+        admin.profile.id,
+      )
+    }
+    await checkLowStock(sku, loc)
+  })
 
   return NextResponse.json({ inventory: data[0] }, { status: 200 })
 }

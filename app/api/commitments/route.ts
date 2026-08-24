@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth'
 import { mapPostgresError, parseInsufficientAvailability } from '@/lib/errors'
@@ -129,14 +129,17 @@ export async function POST(request: Request) {
       // figure is lower than the request. Asserting contention unconditionally produced a
       // message that contradicted the card two lines above it ("Committed by reps: 0").
       // Demand signal for admins: a rep just tried to sell more than exists. The refusal
-      // above is the rep's answer; this is the office hearing about it.
-      await notifyAdmins(
-        {
-          title: 'Oversell refused',
-          body: `${profile.email ?? 'A rep'} asked for ${qty}× ${sku}; only ${available} available.`,
-          url: '/inventory',
-        },
-        user.id,
+      // above is the rep's answer; this is the office hearing about it. after() so the fan-out
+      // runs AFTER the response — a slow APNs can never delay or fail the rep's refusal.
+      after(() =>
+        notifyAdmins(
+          {
+            title: 'Oversell refused',
+            body: `${profile.email ?? 'A rep'} asked for ${qty}× ${sku}; only ${available} available.`,
+            url: '/inventory',
+          },
+          user.id,
+        ),
       )
       return NextResponse.json(
         {
@@ -160,18 +163,21 @@ export async function POST(request: Request) {
   }
 
   // Committed. Tell the admins (not the rep — they are looking at the confirmation), then
-  // check whether this commitment just pushed the line under the low-stock threshold.
-  // Both are fail-silent (lib/push.ts) and cannot un-record the commitment.
+  // check whether this commitment just pushed the line under the low-stock threshold. Both run
+  // via after() — AFTER the 201 is sent — so the two fan-outs on this hottest path never add
+  // latency to, or risk timing out, the rep's commit. Both are fail-silent regardless.
   const loc = typeof location === 'string' && location ? location : 'default'
-  await notifyAdmins(
-    {
-      title: 'New commitment',
-      body: `${profile.email ?? 'A rep'} committed ${qty}× ${sku}.`,
-      url: '/reconciliation',
-    },
-    user.id,
-  )
-  await checkLowStock(sku, loc)
+  after(async () => {
+    await notifyAdmins(
+      {
+        title: 'New commitment',
+        body: `${profile.email ?? 'A rep'} committed ${qty}× ${sku}.`,
+        url: '/reconciliation',
+      },
+      user.id,
+    )
+    await checkLowStock(sku, loc)
+  })
 
   return NextResponse.json({ commitment: data }, { status: 201 })
 }

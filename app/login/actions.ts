@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { after } from 'next/server'
 import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
 import { notifyUsers } from '@/lib/push'
 
@@ -70,7 +71,7 @@ export async function signIn(formData: FormData) {
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     // Logged server-side; the caller gets one generic message either way.
@@ -100,14 +101,17 @@ export async function signIn(formData: FormData) {
   }
 
   // Security notice to the account's registered devices. If it was you, it's a shrug; if it
-  // wasn't, it's the fastest possible tell. Fail-silent, never blocks the sign-in.
-  const { data: sessionData } = await supabase.auth.getUser()
-  if (sessionData.user) {
-    await notifyUsers([sessionData.user.id], {
-      title: 'New sign-in',
-      body: 'Your account just signed in. If this was you, ignore this.',
-      url: '/inventory',
-    })
+  // wasn't, it's the fastest possible tell. The user id comes from the sign-in result (no extra
+  // getUser round trip), and after() runs the push past the redirect so it never delays sign-in.
+  const signedInId = signInData.user?.id
+  if (signedInId) {
+    after(() =>
+      notifyUsers([signedInId], {
+        title: 'New sign-in',
+        body: 'Your account just signed in. If this was you, ignore this.',
+        url: '/inventory',
+      }),
+    )
   }
 
   redirect('/inventory')

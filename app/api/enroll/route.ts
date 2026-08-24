@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, clientIpKey } from '@/lib/rate-limit'
@@ -140,12 +140,15 @@ export async function POST(request: Request) {
     }
   }
 
-  // Provisioned. Let the admins know the team grew — fail-silent, never blocks enrollment.
-  await notifyAdmins({
-    title: 'New team member',
-    body: `${cleanEmail} just set up their portal account.`,
-    url: '/team',
-  })
+  // Provisioned. Let the admins know the team grew — via after(), so it runs past the response
+  // and never delays the new rep's sign-in. Fail-silent, never blocks enrollment.
+  after(() =>
+    notifyAdmins({
+      title: 'New team member',
+      body: `${cleanEmail} just set up their portal account.`,
+      url: '/team',
+    }),
+  )
 
   // 3. Sign the new rep in with the password they just chose. The cookie-bound client sets the
   //    session cookies on THIS response, so the browser is logged in on arrival.
