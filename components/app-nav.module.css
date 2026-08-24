@@ -124,3 +124,33 @@
     box-shadow var(--dur-2) var(--ease-out),
     transform var(--dur-1) var(--ease-out);
 }
+
+/* Page-transition screen. Covers the content area while the next screen loads so a tap always gets
+   an immediate "loading" response instead of a frozen old page. z-index 25 is deliberately BELOW
+   the bar (z 30) and above all page content (max z 2), so the tapped tab stays lit and visible on
+   top of the paper while the body underneath is masked. */
+.transition {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Sit just below the safe-area/header so the spinner lands in the content, not under the notch. */
+  padding-top: calc(env(safe-area-inset-top) + 96px);
+  background: var(--paper);
+  animation: fadeIn var(--dur-1) var(--ease-out) both;
+}
+
+.transitionSpinner {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid var(--accent-line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transitionSpinner { animation-duration: 1.4s; }
+}
