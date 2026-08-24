@@ -83,15 +83,28 @@ function invalidateJwt(): void {
   cachedJwt = null
 }
 
+/**
+ * Rebuild a valid PEM from however the .p8 survived the Netlify env field. Pasting a multi-line
+ * key routinely collapses the base64 body's newlines (to spaces, or nothing), which makes
+ * createPrivateKey throw "DECODER routines::unsupported". We take only the base64 payload,
+ * strip ALL whitespace, and re-wrap it at 64 chars with a clean header/footer — so any paste
+ * form (real newlines, literal \n, space-collapsed, single line) parses.
+ */
+function normalizePem(raw: string): string {
+  const s = raw.replace(/\\n/g, '\n').trim()
+  const m = s.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END [^-]+-----/)
+  const body = (m ? m[1] : s).replace(/\s+/g, '')
+  const wrapped = body.match(/.{1,64}/g)?.join('\n') ?? body
+  return `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`
+}
+
 function providerJwt(): string {
   if (cachedJwt && Date.now() - cachedJwt.at < JWT_TTL_MS) return cachedJwt.token
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
   const head = b64({ alg: 'ES256', kid: env('APNS_KEY_ID') })
   const claims = b64({ iss: env('APNS_TEAM_ID'), iat: Math.floor(Date.now() / 1000) })
   const unsigned = `${head}.${claims}`
-  // The .p8 arrives with literal \n if pasted into a single-line env field; restore them.
-  const pem = (env('APNS_PRIVATE_KEY') as string).replace(/\\n/g, '\n')
-  const key = createPrivateKey(pem)
+  const key = createPrivateKey(normalizePem(env('APNS_PRIVATE_KEY') as string))
   // JWT ES256 wants the raw r||s form, not DER — hence ieee-p1363.
   const sig = sign('sha256', Buffer.from(unsigned), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url')
   const token = `${unsigned}.${sig}`
