@@ -1,0 +1,30 @@
+/* One circular icon button, shared by the theme toggle and the sign-out button so they are
+   provably the same size and shape in the masthead. 44px meets the touch-target floor. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+  background: var(--surface-sunk);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.button svg {
+  display: block;
+}

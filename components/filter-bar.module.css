@@ -56,7 +56,7 @@
      3. a check glyph prefixed to the label */
 .chipSelected {
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border-color: var(--accent);
   font-weight: 700;
 }
@@ -64,7 +64,7 @@
 .chipSelected:hover {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
-  color: #fff;
+  color: var(--surface);
 }
 
 .chip svg {

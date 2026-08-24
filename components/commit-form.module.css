@@ -83,7 +83,7 @@
   min-height: var(--tap);
   padding: 0 var(--space-5);
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border: 0;
   border-radius: var(--radius-pill);
   font-size: var(--text-base);

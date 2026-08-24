@@ -54,7 +54,7 @@
   min-height: var(--tap);
   padding: 0 var(--space-4);
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border: 0;
   border-radius: var(--radius-pill);
   font-size: var(--text-base);
@@ -132,7 +132,7 @@
   height: 20px;
   padding: 0 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
