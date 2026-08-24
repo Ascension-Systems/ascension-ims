@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { notifyAdmins, pushConfigured } from '@/lib/push'
+import { notifyAdmins, pushConfigured, LOW_STOCK_DEFAULT } from '@/lib/push'
 
 /**
  * POST -> the morning digest to admins: everything low on stock plus yesterday's commitment
@@ -13,8 +13,6 @@ import { notifyAdmins, pushConfigured } from '@/lib/push'
  * at the moment it happens. The digest reads the current truth from v_inventory daily, so
  * nothing stays silently low for more than a day.
  */
-const LOW = Number(process.env.PUSH_LOW_STOCK_THRESHOLD ?? 5)
-
 export async function POST(request: Request) {
   const secret = process.env.PUSH_CRON_SECRET
   if (!secret || request.headers.get('x-cron-secret') !== secret) {
@@ -26,23 +24,24 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient()
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const [{ data: low }, { count: committed }] = await Promise.all([
+  const [{ data: inv }, { count: committed }] = await Promise.all([
     admin
       .from('v_inventory')
-      .select('sku, product_name, qty_available')
-      .lte('qty_available', LOW)
+      .select('sku, name, qty_available, low_stock_threshold')
       .order('qty_available', { ascending: true })
-      .limit(50),
+      .limit(500),
     admin.from('commitments').select('id', { count: 'exact', head: true }).gte('created_at', since),
   ])
 
-  const lowLines = low ?? []
+  // Per-product thresholds: PostgREST cannot compare two columns to each other, so the
+  // low filter runs here. The catalogue is small (~100 lines); reading it whole is fine.
+  const lowLines = (inv ?? []).filter((l) => l.qty_available <= (l.low_stock_threshold ?? LOW_STOCK_DEFAULT))
   const parts: string[] = []
   parts.push(`${committed ?? 0} commitment${(committed ?? 0) === 1 ? '' : 's'} in the last day.`)
   if (lowLines.length === 0) {
     parts.push('Nothing low on stock.')
   } else {
-    const named = lowLines.slice(0, 3).map((l) => `${l.product_name ?? l.sku} (${l.qty_available})`)
+    const named = lowLines.slice(0, 3).map((l) => `${l.name ?? l.sku} (${l.qty_available})`)
     parts.push(
       `${lowLines.length} line${lowLines.length === 1 ? '' : 's'} low: ${named.join(', ')}${lowLines.length > 3 ? '…' : ''}`,
     )
