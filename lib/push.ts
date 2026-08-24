@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createPrivateKey, sign } from 'node:crypto'
+import { connect, type ClientHttp2Session } from 'node:http2'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CommitmentState } from '@/lib/types'
 
@@ -69,12 +70,15 @@ export async function diagnoseApns(): Promise<Record<string, unknown>> {
     out.jwtError = e instanceof Error ? e.message : String(e)
     return out
   }
+  const session = openSession(PROD_HOST)
   try {
-    const r = await sendOne('cafebabe'.repeat(8), { title: 'selftest', body: 'selftest', url: '/' }, PROD_HOST)
+    const r = await sendOnSession(session, 'cafebabe'.repeat(8), { title: 'selftest', body: 'selftest', url: '/' })
     out.apnsOk = r.ok
     out.apnsReason = r.reason ?? 'ok'
   } catch (e) {
     out.sendError = e instanceof Error ? e.message : String(e)
+  } finally {
+    session.close()
   }
   return out
 }
@@ -121,24 +125,61 @@ function providerJwt(): string {
   return token
 }
 
-async function sendOne(deviceToken: string, note: PushNote, host: string): Promise<{ ok: boolean; reason?: string }> {
-  const res = await fetch(`${host}/3/device/${deviceToken}`, {
-    method: 'POST',
-    headers: {
+/**
+ * One APNs push over an existing HTTP/2 session. APNs is HTTP/2-ONLY — a plain fetch() (HTTP/1.1)
+ * gets "fetch failed" because Apple refuses the protocol, which is why the send layer uses
+ * node:http2 directly. Sessions are opened once per fan-out and multiplexed (see fanOut).
+ */
+function sendOnSession(session: ClientHttp2Session, deviceToken: string, note: PushNote): Promise<{ ok: boolean; reason?: string }> {
+  return new Promise((resolve) => {
+    const req = session.request({
+      ':method': 'POST',
+      ':path': `/3/device/${deviceToken}`,
       authorization: `bearer ${providerJwt()}`,
       'apns-topic': env('APNS_BUNDLE_ID') as string,
       'apns-push-type': 'alert',
       'apns-priority': '10',
-    },
-    body: JSON.stringify({
-      aps: { alert: { title: note.title, body: note.body }, sound: 'default' },
-      url: note.url ?? '/',
-    }),
-    signal: AbortSignal.timeout(10_000),
+    })
+    let status = 0
+    let data = ''
+    req.on('response', (headers) => {
+      status = Number(headers[':status']) || 0
+    })
+    req.setEncoding('utf8')
+    req.on('data', (chunk) => {
+      data += chunk
+    })
+    req.on('end', () => {
+      if (status === 200) return resolve({ ok: true })
+      let reason: string | undefined
+      try {
+        reason = (JSON.parse(data) as { reason?: string }).reason
+      } catch {
+        /* no body */
+      }
+      resolve({ ok: false, reason: reason ?? `HTTP ${status}` })
+    })
+    req.on('error', (e) => resolve({ ok: false, reason: e.message }))
+    req.setTimeout(10_000, () => {
+      req.close()
+      resolve({ ok: false, reason: 'timeout' })
+    })
+    req.end(
+      JSON.stringify({
+        aps: { alert: { title: note.title, body: note.body }, sound: 'default' },
+        url: note.url ?? '/',
+      }),
+    )
   })
-  if (res.ok) return { ok: true }
-  const body = (await res.json().catch(() => ({}))) as { reason?: string }
-  return { ok: false, reason: body.reason ?? `HTTP ${res.status}` }
+}
+
+/** Open an HTTP/2 session to an APNs host; swallow connection errors (fail-silent). */
+function openSession(host: string): ClientHttp2Session {
+  const s = connect(host)
+  s.on('error', () => {
+    /* individual requests report their own failure; the session error must not throw */
+  })
+  return s
 }
 
 /**
@@ -151,15 +192,26 @@ async function sendOne(deviceToken: string, note: PushNote, host: string): Promi
  */
 async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
   const dead: string[] = []
+  const prod = openSession(PROD_HOST)
+  const sessions: ClientHttp2Session[] = [prod]
+  let sandbox: ClientHttp2Session | undefined
+  const getSandbox = () => {
+    if (!sandbox) {
+      sandbox = openSession(SANDBOX_HOST)
+      sessions.push(sandbox)
+    }
+    return sandbox
+  }
+
   let i = 0
   const worker = async () => {
     while (i < tokens.length) {
       const t = tokens[i++]
       if (t === undefined) break
       try {
-        let r = await sendOne(t, note, PROD_HOST)
+        let r = await sendOnSession(prod, t, note)
         // A dev build's token is a sandbox token; production says BadDeviceToken. Retry there.
-        if (!r.ok && r.reason === 'BadDeviceToken') r = await sendOne(t, note, SANDBOX_HOST)
+        if (!r.ok && r.reason === 'BadDeviceToken') r = await sendOnSession(getSandbox(), t, note)
         if (!r.ok && (r.reason === 'BadDeviceToken' || r.reason === 'Unregistered' || r.reason === 'ExpiredToken')) {
           dead.push(t)
         } else if (!r.ok) {
@@ -169,13 +221,14 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
           console.error('[push] APNs refused:', r.reason)
         }
       } catch (e) {
-        // Surface what the fail-silent design would otherwise bury: a thrown sendOne (bad key,
-        // network, timeout). Logged, never rethrown — one dead device can't stop the fan-out.
+        // Fail-silent: log, never rethrow — one dead device can't stop the fan-out.
         console.error('[push] send threw:', e instanceof Error ? e.message : e)
       }
     }
   }
+  // HTTP/2 multiplexes many streams over one connection; the pool bounds in-flight streams.
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tokens.length) }, worker))
+  for (const s of sessions) s.close()
   return dead
 }
 
