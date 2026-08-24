@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyAdmins, pushConfigured, LOW_STOCK_DEFAULT } from '@/lib/push'
+
+/** Constant-time secret compare over fixed-length digests (no length or short-circuit oracle). */
+function secretMatches(provided: string | null, expected: string): boolean {
+  if (!provided) return false
+  const a = createHash('sha256').update(provided).digest()
+  const b = createHash('sha256').update(expected).digest()
+  return timingSafeEqual(a, b)
+}
 
 /**
  * POST -> the morning digest to admins: everything low on stock plus yesterday's commitment
@@ -15,7 +24,7 @@ import { notifyAdmins, pushConfigured, LOW_STOCK_DEFAULT } from '@/lib/push'
  */
 export async function POST(request: Request) {
   const secret = process.env.PUSH_CRON_SECRET
-  if (!secret || request.headers.get('x-cron-secret') !== secret) {
+  if (!secret || !secretMatches(request.headers.get('x-cron-secret'), secret)) {
     return NextResponse.json({ error: 'FORBIDDEN', message: 'Bad or missing cron secret.' }, { status: 403 })
   }
   if (!pushConfigured()) {

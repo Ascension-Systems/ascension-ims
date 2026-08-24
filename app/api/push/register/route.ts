@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 
+const MAX_DEVICES_PER_USER = 10
+
 /**
  * POST -> register this device's APNs token for the signed-in user; DELETE -> remove it.
  *
@@ -45,6 +47,24 @@ export async function POST(request: Request) {
     console.error('[push/register] upsert failed:', error.code, error.message)
     return NextResponse.json({ error: 'SERVER_ERROR', message: 'Could not register the device.' }, { status: 500 })
   }
+
+  // Cap devices per user: a real person has a handful, and this bounds a hostile client that
+  // would otherwise bank thousands of junk tokens to amplify every later fan-out. Keep the most
+  // recently seen; own-rows only, so RLS is satisfied. Best-effort — never fails the register.
+  try {
+    const { data: mine } = await supabase
+      .from('push_tokens')
+      .select('token')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+    if (mine && mine.length > MAX_DEVICES_PER_USER) {
+      const excess = mine.slice(MAX_DEVICES_PER_USER).map((r) => r.token)
+      await supabase.from('push_tokens').delete().in('token', excess)
+    }
+  } catch (e) {
+    console.error('[push/register] device-cap prune failed:', e)
+  }
+
   return NextResponse.json({ ok: true }, { status: 200 })
 }
 

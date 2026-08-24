@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createPrivateKey, sign } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { CommitmentState } from '@/lib/types'
 
 /**
  * Direct APNs push — no Firebase, no third-party sender. The whole pipeline is:
@@ -47,6 +48,11 @@ export function pushConfigured(): boolean {
 // --- ES256 provider JWT, cached and refreshed inside Apple's accepted window. ---
 let cachedJwt: { token: string; at: number } | null = null
 
+/** Drop the cached JWT so the next send mints a fresh one — called when Apple rejects the token. */
+function invalidateJwt(): void {
+  cachedJwt = null
+}
+
 function providerJwt(): string {
   if (cachedJwt && Date.now() - cachedJwt.at < JWT_TTL_MS) return cachedJwt.token
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
@@ -88,7 +94,7 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
   const dead: string[] = []
   for (let i = 0; i < tokens.length; i += CHUNK) {
     const batch = tokens.slice(i, i + CHUNK)
-    await Promise.allSettled(
+    const settled = await Promise.allSettled(
       batch.map(async (t) => {
         let r = await sendOne(t, note, PROD_HOST)
         // A dev build's token is a sandbox token; production says BadDeviceToken. Retry there.
@@ -96,10 +102,20 @@ async function fanOut(tokens: string[], note: PushNote): Promise<string[]> {
         if (!r.ok && (r.reason === 'BadDeviceToken' || r.reason === 'Unregistered' || r.reason === 'ExpiredToken')) {
           dead.push(t)
         } else if (!r.ok) {
+          // A rejected provider token means our cached JWT is bad — drop it so the next
+          // batch re-signs instead of repeating the failure for up to 45 minutes.
+          if (r.reason === 'ExpiredProviderToken' || r.reason === 'InvalidProviderToken') invalidateJwt()
           console.error('[push] APNs refused:', r.reason)
         }
       }),
     )
+    // Surface the failure the fail-silent design would otherwise bury: a thrown sendOne
+    // (bad key, network, timeout) lands here as a rejection that nothing else logs.
+    for (const s of settled) {
+      if (s.status === 'rejected') {
+        console.error('[push] send threw:', s.reason instanceof Error ? s.reason.message : s.reason)
+      }
+    }
   }
   return dead
 }
@@ -158,11 +174,19 @@ export async function notifyRepsCommittedTo(sku: string, note: PushNote, exclude
   try {
     if (!pushConfigured()) return
     const admin = createAdminClient()
-    const { data } = await admin
+    // 'confirmed_in_source' is the real enum label (migration 0001) — NOT 'confirmed'. An
+    // invalid token poisons the whole IN list (22P02), so getting this wrong silently notifies
+    // nobody. Errors are logged, never swallowed, so a poisoned query can't hide again.
+    const LIVE_STATES: CommitmentState[] = ['pending', 'confirmed_in_source']
+    const { data, error } = await admin
       .from('commitments')
       .select('rep_id')
       .eq('sku', sku)
-      .in('state', ['pending', 'confirmed'])
+      .in('state', LIVE_STATES)
+    if (error) {
+      console.error('[push] notifyRepsCommittedTo query failed:', error.code, error.message)
+      return
+    }
     const ids = [...new Set((data ?? []).map((c) => c.rep_id))].filter((id) => id !== excludeUserId)
     await pushToUserIds(ids, note)
   } catch (e) {
@@ -176,7 +200,10 @@ export async function notifyRepsCommittedTo(sku: string, note: PushNote, exclude
  * fallback). Called after anything that moves stock; repeat alerts for the same line are
  * throttled to one per hour per server instance.
  */
-export const LOW_STOCK_DEFAULT = Number(process.env.PUSH_LOW_STOCK_THRESHOLD ?? 5)
+// Guard against a garbage env value: an un-parseable threshold as NaN would make `qty > NaN`
+// false everywhere (alert on every SKU) AND `qty <= NaN` false everywhere (digest reports none).
+const _lowEnv = Number(process.env.PUSH_LOW_STOCK_THRESHOLD)
+export const LOW_STOCK_DEFAULT = Number.isFinite(_lowEnv) ? _lowEnv : 5
 const lowStockLastSent = new Map<string, number>()
 
 export async function checkLowStock(sku: string, location: string): Promise<void> {

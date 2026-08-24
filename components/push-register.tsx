@@ -46,7 +46,10 @@ export function PushRegister() {
           'pushNotificationActionPerformed',
           ({ notification }) => {
             const url = (notification.data as { url?: string } | undefined)?.url
-            if (typeof url === 'string' && url.startsWith('/')) router.push(url)
+            // Only same-origin in-app paths. Reject protocol-relative "//host" (router.push
+            // would treat it as an external authority) — defense in depth; the payload is
+            // server-set today, but the guard shouldn't depend on that staying true.
+            if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) router.push(url)
           },
         )
 

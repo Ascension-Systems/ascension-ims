@@ -15,3 +15,6 @@ supabase/.branches/
 coverage/
 verify/.out/
 *.tsbuildinfo
+
+# Apple push (APNs) auth keys — must never be committed
+*.p8
