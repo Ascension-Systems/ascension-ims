@@ -25,6 +25,10 @@
    ========================================================================== */
 
 :root {
+  /* Light is the default. The toggle sets data-theme on <html>; see the dark block far below
+     and the no-flash script in app/layout.tsx. */
+  color-scheme: light;
+
   /* --- Warm neutral ground and ink --- */
   --paper: #fbfaf7;
   --surface: #ffffff;
