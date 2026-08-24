@@ -45,6 +45,36 @@ export function pushConfigured(): boolean {
   return !!(env('APNS_TEAM_ID') && env('APNS_KEY_ID') && env('APNS_PRIVATE_KEY') && env('APNS_BUNDLE_ID'))
 }
 
+/**
+ * TEMPORARY diagnostic — reports exactly where the APNs chain stands (config present? JWT signs?
+ * what does Apple say to a dummy token?) without needing a real device. Remove after debugging.
+ */
+export async function diagnoseApns(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {
+    configured: pushConfigured(),
+    teamIdLen: (env('APNS_TEAM_ID') || '').length,
+    keyIdLen: (env('APNS_KEY_ID') || '').length,
+    bundle: env('APNS_BUNDLE_ID'),
+    keyStartsWith: (env('APNS_PRIVATE_KEY') || '').slice(0, 27),
+  }
+  if (!pushConfigured()) return out
+  try {
+    const jwt = providerJwt()
+    out.jwtOk = typeof jwt === 'string' && jwt.split('.').length === 3
+  } catch (e) {
+    out.jwtError = e instanceof Error ? e.message : String(e)
+    return out
+  }
+  try {
+    const r = await sendOne('cafebabe'.repeat(8), { title: 'selftest', body: 'selftest', url: '/' }, PROD_HOST)
+    out.apnsOk = r.ok
+    out.apnsReason = r.reason ?? 'ok'
+  } catch (e) {
+    out.sendError = e instanceof Error ? e.message : String(e)
+  }
+  return out
+}
+
 // --- ES256 provider JWT, cached and refreshed inside Apple's accepted window. ---
 let cachedJwt: { token: string; at: number } | null = null
 

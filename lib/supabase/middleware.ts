@@ -30,6 +30,8 @@ const PUBLIC_PATHS = [
   // never will. It is not unguarded: the route itself refuses (403) any caller that does not
   // present the PUSH_CRON_SECRET header, and when push is unconfigured it is a no-op.
   '/api/push/digest',
+  // TEMPORARY: APNs diagnostic, cron-secret gated in the route. Remove with the route.
+  '/api/push/selftest',
 ]
 
 const isPublic = (pathname: string) =>
