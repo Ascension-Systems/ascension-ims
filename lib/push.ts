@@ -55,7 +55,11 @@ export async function diagnoseApns(): Promise<Record<string, unknown>> {
     teamIdLen: (env('APNS_TEAM_ID') || '').length,
     keyIdLen: (env('APNS_KEY_ID') || '').length,
     bundle: env('APNS_BUNDLE_ID'),
-    keyStartsWith: (env('APNS_PRIVATE_KEY') || '').slice(0, 27),
+    keyRawLen: (env('APNS_PRIVATE_KEY') || '').length,
+    keyBodyLen: pemBody(env('APNS_PRIVATE_KEY') || '').length,
+    keyBodyIsBase64: /^[A-Za-z0-9+/=]+$/.test(pemBody(env('APNS_PRIVATE_KEY') || '')),
+    keyHasLiteralBackslashN: (env('APNS_PRIVATE_KEY') || '').includes('\\n'),
+    keyHasRealNewline: (env('APNS_PRIVATE_KEY') || '').includes('\n'),
   }
   if (!pushConfigured()) return out
   try {
@@ -90,10 +94,15 @@ function invalidateJwt(): void {
  * strip ALL whitespace, and re-wrap it at 64 chars with a clean header/footer — so any paste
  * form (real newlines, literal \n, space-collapsed, single line) parses.
  */
-function normalizePem(raw: string): string {
+function pemBody(raw: string): string {
   const s = raw.replace(/\\n/g, '\n').trim()
   const m = s.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END [^-]+-----/)
-  const body = (m ? m[1] : s).replace(/\s+/g, '')
+  const captured = m && m[1] ? m[1] : s
+  return captured.replace(/\s+/g, '')
+}
+
+function normalizePem(raw: string): string {
+  const body = pemBody(raw)
   const wrapped = body.match(/.{1,64}/g)?.join('\n') ?? body
   return `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`
 }
