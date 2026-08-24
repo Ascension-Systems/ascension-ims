@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SignOutButton } from './sign-out-button'
+import { ThemeToggle } from './theme-toggle'
 import { BrandMark } from './logo'
 import styles from './app-nav.module.css'
 
@@ -76,7 +77,10 @@ export function AppNav({ role }: { role: Role }) {
             <BrandMark className={styles.mark} />
             <span className={styles.wordmark}>Ascension IT IMS</span>
           </div>
-          <SignOutButton />
+          <div className={styles.actions}>
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
 
         {pages.length > 1 ? (
