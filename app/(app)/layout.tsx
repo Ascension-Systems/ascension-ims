@@ -1,5 +1,6 @@
 import { requireUser, getProfile } from '@/lib/auth'
 import { AppNav } from '@/components/app-nav'
+import { ResumeRefresh } from '@/components/resume-refresh'
 
 /**
  * Shared layout for every signed-in screen. The nav is rendered HERE, once, so it stays fixed
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const role = profile?.role === 'admin' ? 'admin' : 'rep'
   return (
     <>
+      <ResumeRefresh />
       <AppNav role={role} />
       {children}
     </>
