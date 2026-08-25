@@ -196,9 +196,9 @@
    stay aligned down the list regardless of the source image's aspect ratio; `contain` because
    catalogue shots are on white and cropping an umbrella in half helps nobody. */
 .thumb {
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
   object-fit: contain;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -208,9 +208,9 @@
 
 @media (min-width: 768px) {
   .thumb {
-    width: 84px;
-    height: 84px;
-    flex-basis: 84px;
+    width: 96px;
+    height: 96px;
+    flex-basis: 96px;
   }
 }
 

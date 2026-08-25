@@ -21,11 +21,14 @@ export function DocViewer({
   title,
   triggerClassName,
   label = 'View',
+  children,
 }: {
   id: string
   title: string
   triggerClassName?: string
   label?: string
+  /** Custom trigger content — e.g. the flyer thumbnail, so the artwork itself opens it. */
+  children?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -47,8 +50,13 @@ export function DocViewer({
 
   return (
     <>
-      <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
-        {label}
+      <button
+        type="button"
+        className={triggerClassName}
+        onClick={() => setOpen(true)}
+        aria-label={children ? `View ${title}` : undefined}
+      >
+        {children ?? label}
       </button>
       {open ? (
         <div

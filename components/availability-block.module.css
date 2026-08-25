@@ -21,7 +21,7 @@
   color: var(--ink-faint);
   /* A long label ("AVAILABLE (QUICKBOOKS)") wraps rather than widening the column. */
   max-width: 88px;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
 /* The hero number. Fraunces at display weight -- the one place the serif carries real size,

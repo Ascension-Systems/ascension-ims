@@ -56,6 +56,20 @@ export default async function ResourcesPage() {
               const hidden = isAdmin && !d.active
               return (
                 <li key={d.id} className={`${styles.promo} ${hidden ? styles.promoHidden : ''}`}>
+                  {/* The artwork leads. A promotion IS its flyer — showing only a title and a
+                      row of buttons hid the one asset a rep actually sends a customer. The
+                      thumbnail is the trigger, so tapping the flyer opens the flyer. */}
+                  <DocViewer id={d.id} title={d.title} triggerClassName={styles.thumbBtn}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      className={styles.promoThumb}
+                      src={`/api/documents/${d.id}/file`}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </DocViewer>
+
                   <div className={styles.promoBody}>
                     <p className={styles.promoName}>{d.title}</p>
                     {d.description ? <p className={styles.promoDesc}>{d.description}</p> : null}
@@ -64,6 +78,7 @@ export default async function ResourcesPage() {
                     ) : null}
                     {hidden ? <span className={styles.hiddenTag}>Hidden from reps</span> : null}
                   </div>
+
                   <div className={styles.promoActions}>
                     <DocViewer id={d.id} title={d.title} triggerClassName={styles.viewBtn} />
                     {isAdmin ? <DocActions id={d.id} active={d.active} /> : null}

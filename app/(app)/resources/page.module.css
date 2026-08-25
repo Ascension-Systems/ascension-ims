@@ -63,12 +63,15 @@
   gap: var(--space-3);
 }
 
+/* Image-led card: the flyer artwork on top, then the words, then the actions. Was a
+   side-by-side row where three buttons squeezed the title into three lines and the artwork
+   never appeared at all. */
 .promo {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
+  overflow: hidden;
   background: var(--surface);
   border: var(--border-width) solid var(--line);
   border-left: var(--rule-width) solid var(--accent);
@@ -148,5 +151,56 @@
   }
   .title {
     font-size: 38px;
+  }
+}
+
+
+/* The flyer thumbnail, and its button wrapper. Cropped from the TOP so the brand bar and the
+   product photograph are what show; the price block below is read in the full view. */
+.thumbBtn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  line-height: 0;
+}
+
+.promoThumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: transform var(--dur-3) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .thumbBtn:hover .promoThumb {
+    transform: scale(1.02);
+  }
+}
+
+/* Actions sit on one row now, with the primary action leading and admin controls quiet
+   beside it rather than competing with it. */
+.promoActions {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Two across once there is room; the artwork earns the width. */
+@media (min-width: 700px) {
+  .promoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
   }
 }

@@ -6,32 +6,39 @@
   justify-content: flex-end;
 }
 
+/* Quiet by design. These are housekeeping controls that only admins see; rendered as bordered
+   pills they carried the same visual weight as "View", the action everyone actually came for,
+   and the three together wrapped and crushed the card title. Underlined text keeps them
+   reachable (still a full 44px target) without competing. */
 .action,
 .remove {
   min-height: var(--tap-chip);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--line);
-  background: var(--surface);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
   font-size: var(--text-label);
   font-weight: 700;
-  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
 .action:hover {
-  border-color: var(--accent-line);
   color: var(--ink);
 }
 
+/* Destructive, so it carries the out-of-stock red rather than plain ink — the one place a
+   status colour is used for meaning outside the stock system, and it means the same thing:
+   stop and read this. */
 .remove {
-  color: var(--mark);
-  border-color: var(--mark);
+  color: var(--status-out);
 }
 
 .remove:hover {
-  background: var(--mark);
-  color: var(--surface);
+  color: var(--status-out);
+  text-decoration-thickness: 2px;
 }
 
 .action:disabled,
