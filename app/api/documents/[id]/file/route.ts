@@ -80,7 +80,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     headers: {
       'content-type': contentType,
       'content-disposition': 'inline',
-      'cache-control': 'private, no-store',
+      'cache-control': 'private, max-age=300, stale-while-revalidate=86400',
       'x-content-type-options': 'nosniff',
     },
   })

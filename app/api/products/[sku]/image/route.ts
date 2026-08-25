@@ -56,7 +56,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
       // fix stayed invisible on any device that had already loaded the old image — the photo
       // is served from a stable URL (/api/products/SKU/image), so the URL cannot signal a
       // change on its own.
-      'cache-control': 'private, max-age=60, must-revalidate',
+      // NO must-revalidate. It forbids serving a cached copy when revalidation fails, so on a
+      // flaky connection every thumbnail broke the moment max-age lapsed. stale-while-revalidate
+      // keeps showing the cached photo and refreshes in the background instead.
+      'cache-control': 'private, max-age=300, stale-while-revalidate=86400',
     },
   })
 }
