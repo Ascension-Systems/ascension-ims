@@ -196,3 +196,47 @@
   box-shadow: 0 0 0 3px var(--accent-tint), var(--shadow-card);
   outline: none;
 }
+
+
+/* ---------------------------------------------------------------------------
+   Wide screens: give the sign-in screens a real card.
+
+   The layout was already centred, but on a laptop it was bare text floating on
+   an otherwise empty cream field — technically fine, visually unfinished, and
+   it is the FIRST screen anyone sees. On a phone the full-bleed treatment is
+   right and stays; from 700px up the content sits on a surface with a border,
+   a soft shadow and room to breathe, and the page behind it carries a quiet
+   warm wash so the card reads as deliberate rather than stranded.
+   --------------------------------------------------------------------------- */
+@media (min-width: 700px) {
+  .main {
+    max-width: 460px;
+    padding: var(--space-6);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) * 1.4);
+    box-shadow: var(--shadow-float);
+    /* The card sizes to its content and centres in the viewport, rather than
+       stretching the full height as it does on a phone. */
+    min-height: auto;
+    /* Sits high rather than dead-centre: the join form is tall, and vertical centring pushes
+       its first field below the fold on a short laptop screen. A viewport-relative top margin
+       keeps it balanced on a large display without that risk. */
+    margin: clamp(var(--space-5), 7vh, 96px) auto;
+  }
+
+  /* A hairline of the brand across the top edge — the same navy->honey sweep the
+     app bar uses, so the sign-in screen is recognisably part of the product. */
+  .main::before {
+    content: '';
+    display: block;
+    height: 4px;
+    margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) var(--space-2);
+    border-radius: calc(var(--radius) * 1.4) calc(var(--radius) * 1.4) 0 0;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--brand-cyan-deep) 60%, var(--brand-cyan) 100%);
+  }
+
+  .heading {
+    font-size: 40px;
+  }
+}
