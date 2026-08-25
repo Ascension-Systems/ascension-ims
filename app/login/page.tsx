@@ -26,7 +26,7 @@ export default async function LoginPage({
 
   return (
     <main className={styles.main}>
-      <BrandMark className={styles.brandMark} alt="Ascension IT" />
+      <BrandMark className={styles.brandMark} alt="Plantation Prestige" />
       <h1 className={styles.heading}>Sign in</h1>
       <p className={styles.body}>Enter your work email and password.</p>
 

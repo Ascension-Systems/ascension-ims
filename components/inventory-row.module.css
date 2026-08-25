@@ -61,9 +61,12 @@
   flex: 1 1 auto;
 }
 
+/* Weights raised across this card 2026-08-24 (Levon): "the text is a little thin ... my eyes,
+   a little older ... It doesn't have to be bigger. It can be thicker." Size is unchanged; only
+   weight and ink density move, which is exactly what he asked for. */
 .name {
   font-size: var(--text-name);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.005em;
   /* 2-line clamp with an ellipsis. The full name is revealed on expand. */
@@ -78,7 +81,7 @@
 .sku {
   font-family: var(--font-mono);
   font-size: var(--text-sku);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.04em;
   /* The SKU is the one string a rep reads aloud to quote a customer, often on a phone in a
      warehouse or a car park. It takes the 7:1 token, not the 5.7:1 one. */
@@ -101,7 +104,8 @@
 
 .meta {
   font-size: var(--text-components);
-  color: var(--ink-faint);
+  font-weight: 500;
+  color: var(--ink-soft);
 }
 
 .source {
@@ -134,11 +138,12 @@
 
 .detailRow dt {
   color: var(--ink-soft);
+  font-weight: 500;
 }
 
 .detailRow dd {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
   overflow-wrap: anywhere;

@@ -17,7 +17,7 @@ export const metadata = { title: 'Set up your access — AIT IMS' }
 export default function JoinPage() {
   return (
     <main className={styles.main}>
-      <BrandMark className={styles.brandMark} alt="Ascension IT" />
+      <BrandMark className={styles.brandMark} alt="Plantation Prestige" />
       <h1 className={styles.heading}>Set up your access</h1>
       <p className={styles.body}>
         {/* This said "there is no password and nothing to wait for by email" -- true under the

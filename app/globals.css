@@ -34,20 +34,42 @@
   --surface: #ffffff;
   --surface-sunk: #f4f1ea;
   --ink: #1c1917;
-  --ink-soft: #57514b;
-  --ink-faint: #6b6259;
+  /* Secondary inks darkened 2026-08-24 (Levon: "the text is a little thin"). Denser ink is the
+     other half of "thicker, not bigger" — weight alone cannot fix a low-contrast grey. */
+  --ink-soft: #4a443e;
+  --ink-faint: #5c554d;
   --line: #e8e3da;
   --line-soft: #f1ede6;
 
-  /* --- The one accent: Ascension IT navy. Brand, hierarchy, interaction. NOT status. --- */
-  --accent: #0a2c4d;
-  --accent-deep: #071a2c;
-  --accent-tint: #e8f1f9;
-  --accent-line: #c4d8e8;
+  /* --- The one accent: Plantation Prestige brown. Brand, hierarchy, interaction. NOT status.
+     Sampled from plantationprestige.com — warm brown over cream, their outdoor-furniture
+     identity. Variable NAMES are unchanged from the previous brand on purpose: branding is
+     centralised here, so re-skinning is a value change, never a component change. --- */
+  --accent: #5c3d24;
+  --accent-deep: #3e2817;
+  --accent-tint: #f4ede3;
+  --accent-line: #dbc7ae;
 
-  /* --- Cyan signature, from the logo gradient. Highlight only, never text. --- */
-  --brand-cyan: #1db9e1;
-  --brand-cyan-deep: #019dc5;
+  /* --- Honey signature, the warm highlight in their palette. Highlight only, never text.
+     (Named --brand-cyan for continuity with existing rules; the value is honey.) --- */
+  --brand-cyan: #c89a5b;
+  --brand-cyan-deep: #a87838;
+
+  /* --- STATUS COLOUR (Levon, 2026-08-24). Stock status now carries HUE as well as the
+     shape/glyph/border/label channels below — colour is an ADDED channel, never the only one,
+     so the colour-blind-safe property is preserved. Mapping is his, verbatim:
+       out of stock -> RED      ("out of stock being red")
+       low          -> AMBER    ("yellow or orange to get somebody's attention")
+       in stock     -> BLUE     ("in stock blue, calm, we got supply")
+       on promotion -> GREEN    ("green, people associate that with ooh sale, money") --- */
+  --status-in: #1668a8;
+  --status-in-tint: #e8f2fa;
+  --status-low: #b06a1f;
+  --status-low-tint: #fbf0e0;
+  --status-out: #b3261e;
+  --status-out-tint: #fbeae8;
+  --status-promo: #1f7a4d;
+  --status-promo-tint: #e6f4ec;
 
   /* Status ink — the achromatic channel that carries stock status. Kept
      separate from --ink so status marks read as deliberate, not incidental. */
@@ -68,12 +90,14 @@
   --font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Hanken Grotesk', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --text-base: 16px;
-  --text-name: 17px;
-  --text-sku: 13px;
-  --text-figure: 40px;
-  --text-components: 13.5px;
-  --text-label: 12px;
+  /* Type scale raised across the board 2026-08-24 (Levon): read at arm's length, in sun, by
+     people who are not going to squint. Bigger AND heavier, not one or the other. */
+  --text-base: 17px;
+  --text-name: 20px;
+  --text-sku: 14.5px;
+  --text-figure: 52px;
+  --text-components: 15px;
+  --text-label: 13px;
 
   /* --- Tap targets: minimum 48px. --- */
   --tap: 48px;
@@ -87,7 +111,7 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  --rule-width: 4px;
+  --rule-width: 10px;
   --border-width: 1.5px;
   --radius: 14px;
   --radius-sm: 9px;
@@ -215,61 +239,88 @@ a {
    Labels are ALWAYS rendered; the glyph is aria-hidden.
    ========================================================================== */
 
+/* Bigger and bolder 2026-08-24 (Levon): a status badge is the thing a rep reads first, so it
+   is sized to be read first — taller, heavier, wider tracking, larger glyph. */
 .statusBadge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
-  padding: 3px 10px 3px 8px;
-  border: var(--border-width) solid var(--mark);
+  min-height: 40px;
+  padding: 5px 16px 5px 12px;
+  border: 2px solid var(--mark);
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--mark);
   font-size: var(--text-label);
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .statusBadge svg {
   display: block;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
 }
 
-/* IN STOCK — solid inverted fill, solid border, square glyph. */
+/* IN STOCK — solid BLUE fill ("calm, we got supply"), solid border, square glyph. */
 .statusInStock {
-  background: var(--mark);
+  background: var(--status-in);
   color: var(--surface);
+  border-color: var(--status-in);
   border-style: solid;
 }
 
-/* LOW — outlined, solid border, triangle glyph. */
+/* LOW — AMBER, the attention colour. Outlined, solid border, triangle glyph. */
 .statusLow {
   border-style: solid;
+  border-color: var(--status-low);
+  background: var(--status-low-tint);
+  color: var(--status-low);
 }
 
-/* NONE — INCOMING — dashed border, arrow-in-dashed-ring glyph. */
+/* NONE — INCOMING — RED (it is still out of stock); dashed border + arrow glyph carry
+   "restocking", so the dash is what separates it from plain out-of-stock, not the hue. */
 .statusNoneIncoming {
   border-style: dashed;
+  border-color: var(--status-out);
+  background: var(--status-out-tint);
+  color: var(--status-out);
 }
 
-/* NONE AVAILABLE — dotted border, slashed-circle glyph, faint hatched ground. */
+/* NONE AVAILABLE — RED, dotted border, slashed-circle glyph, faint hatched ground. */
 .statusNone {
   border-style: dotted;
+  border-color: var(--status-out);
+  background: var(--status-out-tint);
   background-image: var(--hatch);
+  color: var(--status-out);
 }
 
-/* --- The left rule: a channel of position + style. --- */
+/* --- The left rule: a channel of position + style, now also carrying the status hue.
+   The WHOLE CARD is tinted with the status colour too (Levon: "more than just little slices,
+   it should be popping"), so status is readable from across a room, not just at the edge.
+   `li.rule*` (element + class) outranks the module's single-class `.card` background, which is
+   what lets the tint win without !important. --- */
 .ruleInStock {
-  border-left: var(--rule-width) solid var(--mark);
+  border-left: var(--rule-width) solid var(--status-in);
+}
+li.ruleInStock {
+  background-color: var(--status-in-tint);
+}
+li.ruleLow {
+  background-color: var(--status-low-tint);
+}
+li.ruleNoneIncoming,
+li.ruleNone {
+  background-color: var(--status-out-tint);
 }
 
 .ruleLow {
   border-left: var(--rule-width) solid transparent;
-  background-image: linear-gradient(var(--mark) 0 50%, transparent 50% 100%);
+  background-image: linear-gradient(var(--status-low) 0 50%, transparent 50% 100%);
   background-repeat: no-repeat;
   background-size: var(--rule-width) 100%;
   background-position: left top;
@@ -278,22 +329,32 @@ a {
 }
 
 .ruleNoneIncoming {
-  border-left: var(--rule-width) dashed var(--mark);
+  border-left: var(--rule-width) dashed var(--status-out);
 }
 
 .ruleNone {
-  border-left: var(--rule-width) dotted var(--mark);
+  border-left: var(--rule-width) dotted var(--status-out);
 }
 
 /* --- The availability figure: a small status tick sits beside a clean number.
    The number itself is no longer boxed — the rule + badge carry status, so the
    hero figure stays legible and calm. A thin underline weight varies by status
    as a quiet fourth reinforcement on the figure itself. --- */
-.figureInStock,
-.figureLow,
+/* The hero number takes the status hue where attention is WARRANTED, and stays calm ink when
+   the answer is "you're fine". A wall of 97 coloured numbers would dilute the very signal Levon
+   asked for — reserving hue for the exceptions is what makes "crap, that's out of stock" land
+   while flipping. (In-stock still reads blue on its badge and left rule.) */
+.figureInStock {
+  color: var(--ink);
+}
+
+.figureLow {
+  color: var(--status-low);
+}
+
 .figureNoneIncoming,
 .figureNone {
-  color: var(--ink);
+  color: var(--status-out);
 }
 
 /* ==========================================================================
@@ -304,8 +365,8 @@ a {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
-  padding: 3px 10px;
+  min-height: 40px;
+  padding: 5px 14px;
   background: var(--surface-sunk);
   color: var(--ink-soft);
   border: var(--border-width) solid var(--ink-faint);
@@ -319,9 +380,9 @@ a {
 
 .staleBadge svg {
   display: block;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
 }
 
 /* A dashed outline around the whole card, so staleness reads before the badge. */
@@ -448,19 +509,30 @@ button:disabled { opacity: 0.55; cursor: default; }
   --surface: #1e1b17;
   --surface-sunk: #2a2620;
   --ink: #f4f0e9;
-  --ink-soft: #c6bfb3;
-  --ink-faint: #998e80;
+  /* Lightened to match the light-mode density bump — same "thicker, not bigger" intent. */
+  --ink-soft: #d2cbc0;
+  --ink-faint: #a89d8e;
   --line: #362f28;
   --line-soft: #2a2620;
 
-  /* Accent flips navy -> light blue so it stands out on the dark ground and can host dark text. */
-  --accent: #6fb3ec;
-  --accent-deep: #97c9f3;
-  --accent-tint: #16304a;
-  --accent-line: #315a7e;
+  /* Accent flips deep brown -> warm tan so it stands out on the dark ground and can host dark text. */
+  --accent: #d8b48c;
+  --accent-deep: #e8cfb0;
+  --accent-tint: #33251a;
+  --accent-line: #5e4632;
 
-  --brand-cyan: #38c6ee;
-  --brand-cyan-deep: #16b6e0;
+  --brand-cyan: #e0b472;
+  --brand-cyan-deep: #c89a5b;
+
+  /* Status hues lighten so they carry on the dark ground at the same contrast. */
+  --status-in: #7fbceb;
+  --status-in-tint: #14293b;
+  --status-low: #e0a24a;
+  --status-low-tint: #33260f;
+  --status-out: #f08a80;
+  --status-out-tint: #3a1b18;
+  --status-promo: #63c692;
+  --status-promo-tint: #123020;
 
   /* Status ink flips to light so the achromatic status channel reads on dark. */
   --mark: #ece7df;

@@ -75,7 +75,7 @@ export function AppNav({ role }: { role: Role }) {
         <div className={styles.top}>
           <div className={styles.brand}>
             <BrandMark className={styles.mark} />
-            <span className={styles.wordmark}>Ascension IT IMS</span>
+            <span className={styles.wordmark}>Plantation Prestige</span>
           </div>
           <div className={styles.actions}>
             <ThemeToggle />

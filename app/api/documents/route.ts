@@ -213,7 +213,9 @@ export async function POST(request: Request) {
   after(() =>
     notifyEveryone(
       {
-        title: kind === 'promo' ? 'New promotion' : 'New resource',
+        // KINDS is ['promotion','spec_sheet','flyer','price_sheet'] — this compared against
+        // 'promo', which never matches, so every promotion announced itself as "New resource".
+        title: kind === 'promotion' ? 'New promotion' : 'New resource',
         body: title,
         url: '/resources',
       },

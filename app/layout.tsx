@@ -3,17 +3,17 @@ import './globals.css'
 import { NativeLinkHandler } from '@/components/native-link-handler'
 
 /**
- * Branded as "Ascension IT IMS" (Inventory Management System). This reverses the earlier D2
- * decision to ship unbranded — the Human approved Ascension IT branding on 2026-08-21 and
- * supplied the logo (public/brand/).
+ * Branded to Plantation Prestige 2026-08-24 (Levon: "we branded to them" / "adopt some of
+ * the colour schemes" from plantationprestige.com). Brand values live in app/globals.css
+ * tokens, so re-skinning is a value change, not a component change.
  */
 export const metadata: Metadata = {
-  title: 'Ascension IT IMS',
+  title: 'Plantation Prestige IMS',
   description: 'Live stock availability for the sales team.',
-  applicationName: 'Ascension IT IMS',
+  applicationName: 'Plantation Prestige IMS',
   appleWebApp: {
     capable: true,
-    title: 'Ascension IT',
+    title: 'Plantation Prestige',
     statusBarStyle: 'default',
   },
   formatDetection: { telephone: false },
@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0a2c4d',
+  themeColor: '#5c3d24',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
