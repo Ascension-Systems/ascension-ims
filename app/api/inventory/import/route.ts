@@ -173,11 +173,18 @@ export async function POST(request: Request) {
       const committedQty = int(rec.qty_committed)
       const incoming = int(rec.qty_incoming)
       if (onHand !== null || committedQty !== null || incoming !== null) {
-        const invPatch: Record<string, unknown> = { sku, location: 'default', updated_at: new Date().toISOString() }
+        const invPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
         if (onHand !== null) invPatch.qty_on_hand = onHand
         if (committedQty !== null) invPatch.qty_committed = committedQty
         if (incoming !== null) invPatch.qty_incoming = incoming
-        const iu = await supabase.from('inventory').upsert(invPatch, { onConflict: 'sku,location' })
+
+        // UPDATE for an existing line, INSERT only for a genuinely new one. `.upsert()` compiles
+        // to INSERT ... ON CONFLICT, which needs the INSERT privilege even when it ends up
+        // updating — and admins hold UPDATE on inventory, not INSERT. Splitting the two means
+        // correcting stock on the existing catalogue works with the grants already in place.
+        const iu = isNew
+          ? await supabase.from('inventory').insert({ ...invPatch, sku, location: 'default' })
+          : await supabase.from('inventory').update(invPatch).eq('sku', sku).eq('location', 'default')
         if (iu.error) {
           results.push({ sku, action: isNew ? 'created' : 'updated', detail: `quantities not applied: ${iu.error.message}` })
           isNew ? (created += 1) : (updated += 1)
