@@ -37,7 +37,7 @@ export default async function ResourcesPage() {
 
       <div className={styles.intro}>
         <p className={styles.eyebrow}>Resources</p>
-        <h1 className={styles.title}>Promotions &amp; spec sheets</h1>
+        <h1 className={styles.title}>Promotions and spec sheets</h1>
         <p className={styles.subtitle}>
           Current promotions and the full spec-sheet library, always up to date. Everything here
           is the latest version — no more chasing emails.
@@ -91,7 +91,7 @@ export default async function ResourcesPage() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Spec sheets &amp; flyers</h2>
+        <h2 className={styles.sectionTitle}>Spec sheets and flyers</h2>
         <SheetList
           items={sheets.map((d) => ({
             id: d.id,

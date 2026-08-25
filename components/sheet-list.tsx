@@ -60,6 +60,19 @@ export function SheetList({ items, isAdmin }: { items: Sheet[]; isAdmin: boolean
             const hidden = isAdmin && !s.active
             return (
               <li key={s.id} className={`${styles.item} ${hidden ? styles.itemHidden : ''}`}>
+                {/* A small crop of the sheet itself, so the library scans as documents rather
+                    than as a list of filenames. Tapping it opens the same viewer as "View". */}
+                <DocViewer id={s.id} title={s.title} triggerClassName={styles.thumbBtn}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className={styles.thumb}
+                    src={`/api/documents/${s.id}/file`}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </DocViewer>
+
                 <div className={styles.body}>
                   <p className={styles.itemTitle}>{s.title}</p>
                   <p className={styles.itemMeta}>

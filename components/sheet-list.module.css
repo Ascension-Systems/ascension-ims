@@ -44,12 +44,23 @@
 }
 
 .body {
+  /* Takes the space between the thumbnail and the actions. */
+  flex: 1 1 auto;
+  min-width: 0;
   min-width: 0;
 }
 
 .itemTitle {
-  font-size: var(--text-name);
-  font-weight: 600;
+  /* One step down from the product-card headline and clamped: this is a list to scan for a
+     document, and a four-line title pushed the actions off the card. */
+  font-size: var(--text-components);
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: var(--ink);
 }
 
@@ -94,4 +105,37 @@
 
 .viewBtn:hover {
   background: var(--accent-deep);
+}
+
+/* Sheet thumbnail — a crop of the document's own first page, cropped from the top so the
+   brand bar and product photograph identify it at a glance. Smaller than the promo card's:
+   a spec sheet is a reference to find, not a piece of artwork to admire. */
+.thumbBtn {
+  display: block;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.thumb {
+  display: block;
+  width: 64px;
+  height: 78px;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+@media (min-width: 768px) {
+  .thumb {
+    width: 80px;
+    height: 98px;
+  }
 }

@@ -20,6 +20,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { createClient } from '@supabase/supabase-js'
+import { cleanName } from './scrape-plantation-catalogue.mjs'
 
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8').split('\n').filter((l) => l.includes('=')).map((l) => {
@@ -223,11 +224,15 @@ async function main() {
   for (const p of promos) {
     rows.push({ kind: 'promotion', title: p.title, description: p.description, img: await render(p.svg, await photoFor(p.item)) })
   }
+  // Match each sheet's photo to the product it is ABOUT. Products now carry their real
+  // published names, so an exact name lookup pairs the right photograph with the right
+  // title — previously the photo was taken by position and showed a different product.
+  const byName = new Map(catalogue.map((c) => [cleanName(c.name).toLowerCase(), c]))
   let n = 10
   for (const p of (products ?? []).slice(0, 4)) {
-    const item = catalogue[n++ % catalogue.length]
+    const item = byName.get(String(p.name).toLowerCase()) ?? catalogue[n++ % catalogue.length]
     rows.push({
-      kind: 'spec_sheet', title: `${p.name} — Spec Sheet`, description: null, product_sku: p.sku,
+      kind: 'spec_sheet', title: p.name, description: null, product_sku: p.sku,
       img: await render(specSVG({ title: p.name, sku: p.sku, specs: specsFor(p.name) }), await photoFor(item)),
     })
   }
