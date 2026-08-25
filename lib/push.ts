@@ -50,7 +50,7 @@ export function pushConfigured(): boolean {
  * TEMPORARY diagnostic — reports exactly where the APNs chain stands (config present? JWT signs?
  * what does Apple say to a dummy token?) without needing a real device. Remove after debugging.
  */
-export async function diagnoseApns(): Promise<Record<string, unknown>> {
+export async function diagnoseApns(opts: { real?: boolean; title?: string; body?: string } = {}): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {
     configured: pushConfigured(),
     teamIdLen: (env('APNS_TEAM_ID') || '').length,
@@ -70,6 +70,40 @@ export async function diagnoseApns(): Promise<Record<string, unknown>> {
     out.jwtError = e instanceof Error ? e.message : String(e)
     return out
   }
+  // Optionally send to the REAL registered devices, so "does push actually work" can be
+  // answered by Apple rather than inferred. Reports the per-device reason; 'ok' means APNs
+  // accepted the payload for delivery.
+  if (opts.real) {
+    const admin = createAdminClient()
+    const { data: rows } = await admin.from('push_tokens').select('token, user_id')
+    const session = openSession(PROD_HOST)
+    const sandbox = openSession(SANDBOX_HOST)
+    const results: Record<string, string> = {}
+    try {
+      for (const r of rows ?? []) {
+        let res = await sendOnSession(session, r.token, {
+          title: opts.title ?? 'Plantation Prestige',
+          body: opts.body ?? 'Push notifications are working.',
+          url: '/inventory',
+        })
+        if (!res.ok && (res.reason === 'BadDeviceToken' || res.reason === 'BadEnvironmentKeyInToken')) {
+          res = await sendOnSession(sandbox, r.token, {
+            title: opts.title ?? 'Plantation Prestige',
+            body: opts.body ?? 'Push notifications are working.',
+            url: '/inventory',
+          })
+        }
+        results[`${r.user_id.slice(0, 8)}…`] = res.ok ? 'ok — accepted by Apple' : (res.reason ?? 'unknown')
+      }
+    } finally {
+      session.close()
+      sandbox.close()
+    }
+    out.devices = rows?.length ?? 0
+    out.delivery = results
+    return out
+  }
+
   const note: PushNote = { title: 'selftest', body: 'selftest', url: '/' }
   const dummy = 'cafebabe'.repeat(8)
   for (const [label, host] of [['prod', PROD_HOST], ['sandbox', SANDBOX_HOST]] as const) {

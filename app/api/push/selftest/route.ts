@@ -11,5 +11,7 @@ export async function POST(request: Request) {
   if (!secret || request.headers.get('x-cron-secret') !== secret) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
   }
-  return NextResponse.json(await diagnoseApns())
+  let body: { real?: boolean; title?: string; body?: string } = {}
+  try { body = await request.json() } catch { /* no body: dummy-token diagnostic */ }
+  return NextResponse.json(await diagnoseApns(body))
 }
