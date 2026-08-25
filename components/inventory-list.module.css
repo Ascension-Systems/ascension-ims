@@ -74,21 +74,21 @@
   padding: 0 var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
 }
 
-/* >= 768px: the same cards in a two-column grid. No new components, no reflowed table. */
+/* >= 768px: the same cards in a grid. No new components, no reflowed table.
+
+   Columns are derived from the AVAILABLE WIDTH via auto-fill, not from the viewport. The old
+   rules asked for 2 columns at 768px and 3 at 1200px while the container was capped at 780px,
+   so on a desktop each card got 241px — the product name was squeezed to zero width and
+   disappeared entirely, leaving cards showing only a SKU. A card needs ~340px to hold a photo,
+   a name and the figure, so that is the floor and the browser decides how many fit. */
 @media (min-width: 768px) {
   .list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: var(--space-3);
     /* Without this, expanding one card stretches every card in its grid row to match,
        inflating unrelated neighbours into tall empty rectangles. */
     align-items: start;
-  }
-}
-
-@media (min-width: 1200px) {
-  .list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
