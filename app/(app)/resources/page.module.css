@@ -200,7 +200,16 @@
 /* Two across once there is room; the artwork earns the width. */
 @media (min-width: 700px) {
   .promoGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     align-items: start;
+  }
+}
+
+/* The flyers are the visual heart of this screen and it is what gets projected in a meeting,
+   so it takes real width on a large display rather than sitting in a 780px column with empty
+   space either side. Reading-oriented screens (reconciliation, team) stay narrow on purpose. */
+@media (min-width: 1100px) {
+  .main {
+    max-width: 1200px;
   }
 }
