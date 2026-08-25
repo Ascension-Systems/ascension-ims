@@ -81,19 +81,21 @@ export async function diagnoseApns(opts: { real?: boolean; title?: string; body?
     const results: Record<string, string> = {}
     try {
       for (const r of rows ?? []) {
-        let res = await sendOnSession(session, r.token, {
+        const note = {
           title: opts.title ?? 'Plantation Prestige',
           body: opts.body ?? 'Push notifications are working.',
           url: '/inventory',
-        })
-        if (!res.ok && (res.reason === 'BadDeviceToken' || res.reason === 'BadEnvironmentKeyInToken')) {
-          res = await sendOnSession(sandbox, r.token, {
-            title: opts.title ?? 'Plantation Prestige',
-            body: opts.body ?? 'Push notifications are working.',
-            url: '/inventory',
-          })
         }
-        results[`${r.user_id.slice(0, 8)}…`] = res.ok ? 'ok — accepted by Apple' : (res.reason ?? 'unknown')
+        const prod = await sendOnSession(session, r.token, note)
+        let verdict = prod.ok ? 'ok via PRODUCTION gateway' : `production: ${prod.reason}`
+        if (!prod.ok && (prod.reason === 'BadDeviceToken' || prod.reason === 'BadEnvironmentKeyInToken')) {
+          const sb = await sendOnSession(sandbox, r.token, note)
+          verdict = sb.ok ? 'ok via SANDBOX gateway' : `production: ${prod.reason} / sandbox: ${sb.reason}`
+        }
+        // WHICH gateway accepted is the whole diagnosis: a token registered in one environment
+        // is silently undeliverable from the other, and both return 200-shaped success paths in
+        // the aggregate. Reporting only "ok" hid exactly the failure we are chasing.
+        results[`${r.user_id.slice(0, 8)}…`] = verdict
       }
     } finally {
       session.close()
@@ -176,6 +178,11 @@ function sendOnSession(session: ClientHttp2Session, deviceToken: string, note: P
       'apns-topic': env('APNS_BUNDLE_ID') as string,
       'apns-push-type': 'alert',
       'apns-priority': '10',
+      // WITHOUT this header APNs treats expiration as 0: attempt delivery once, and if the
+      // device is not reachable at that instant, discard it permanently. A phone that is
+      // locked, on a flaky connection, or briefly asleep silently loses the notification.
+      // One hour lets APNs retry, which is the behaviour anyone actually expects.
+      'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600),
     })
     let status = 0
     let data = ''
