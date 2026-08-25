@@ -65,16 +65,20 @@ export default async function TeamPage() {
         </div>
       </div>
 
-      <InviteForm
-        repCode={repCode?.code ?? null}
-        repUses={repCode?.uses ?? 0}
-        repMaxUses={repCode?.max_uses ?? null}
-        adminCode={adminCode?.code ?? null}
-      />
+      {/* The three admin tools sit in one grid so a wide screen shows them side by side
+          instead of a single narrow column with the right half of the window empty. */}
+      <div className={styles.adminGrid}>
+        <InviteForm
+          repCode={repCode?.code ?? null}
+          repUses={repCode?.uses ?? 0}
+          repMaxUses={repCode?.max_uses ?? null}
+          adminCode={adminCode?.code ?? null}
+        />
 
-      <ImportForm />
+        <ImportForm />
 
-      <AnnounceForm />
+        <AnnounceForm />
+      </div>
 
       {rows.length > 0 ? (
         <ul className={styles.list}>

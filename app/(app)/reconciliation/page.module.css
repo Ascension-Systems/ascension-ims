@@ -264,3 +264,48 @@
     font-size: 38px;
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Wide screens. This stylesheet is shared by Reconciliation and Team, and both
+   sat in a 780px column while the nav spanned the full window — on a laptop or a
+   projector that reads as a narrow strip floating in empty space.
+
+   The container widens, and the two card lists become grids so the extra width
+   carries MORE CONTENT rather than just stretching each card into a long line.
+   The intro copy keeps its own ch-based measure, because a headline and a
+   paragraph should not run the full width of a 1440px display.
+   --------------------------------------------------------------------------- */
+@media (min-width: 1100px) {
+  .main {
+    max-width: 1200px;
+  }
+
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  /* The stat tiles read as a header summary, so they stay left rather than
+     stretching edge to edge across twelve hundred pixels. */
+  .summary {
+    max-width: 640px;
+  }
+}
+
+
+/* Team's admin tools: one column on a phone, two once there is room. Each child manages its
+   own internal layout, so this only decides how the tools sit relative to each other. */
+.adminGrid {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .adminGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
