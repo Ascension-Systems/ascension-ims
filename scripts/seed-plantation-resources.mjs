@@ -227,10 +227,10 @@ async function main() {
   // Match each sheet's photo to the product it is ABOUT. Products now carry their real
   // published names, so an exact name lookup pairs the right photograph with the right
   // title — previously the photo was taken by position and showed a different product.
-  const byName = new Map(catalogue.map((c) => [cleanName(c.name).toLowerCase(), c]))
+  const photoByName = new Map(catalogue.map((c) => [cleanName(c.name).toLowerCase(), c]))
   let n = 10
   for (const p of (products ?? []).slice(0, 4)) {
-    const item = byName.get(String(p.name).toLowerCase()) ?? catalogue[n++ % catalogue.length]
+    const item = photoByName.get(String(p.name).toLowerCase()) ?? catalogue[n++ % catalogue.length]
     rows.push({
       kind: 'spec_sheet', title: p.name, description: null, product_sku: p.sku,
       img: await render(specSVG({ title: p.name, sku: p.sku, specs: specsFor(p.name) }), await photoFor(item)),

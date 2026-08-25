@@ -68,7 +68,6 @@ export function SheetList({ items, isAdmin }: { items: Sheet[]; isAdmin: boolean
                     className={styles.thumb}
                     src={`/api/documents/${s.id}/file`}
                     alt=""
-                    loading="lazy"
                     decoding="async"
                   />
                 </DocViewer>
@@ -77,7 +76,7 @@ export function SheetList({ items, isAdmin }: { items: Sheet[]; isAdmin: boolean
                   <p className={styles.itemTitle}>{s.title}</p>
                   <p className={styles.itemMeta}>
                     {KIND_LABEL[s.kind] ?? 'Document'}
-                    {s.productName ? ` · ${s.productName}` : ''}
+                    {s.productName && s.productName !== s.title ? ` · ${s.productName}` : ''}
                   </p>
                   {hidden ? <span className={styles.hiddenTag}>Hidden from reps</span> : null}
                 </div>
