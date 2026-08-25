@@ -12,7 +12,7 @@ import styles from '@/app/message.module.css'
  */
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Set up your access — AIT IMS' }
+export const metadata = { title: 'Set up your access — Plantation Prestige' }
 
 export default function JoinPage() {
   return (

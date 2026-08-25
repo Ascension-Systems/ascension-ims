@@ -15,7 +15,7 @@ const SERVER_URL = process.env.CAP_SERVER_URL || 'https://ascension-inventory.ne
 
 const config: CapacitorConfig = {
   appId: 'com.ascensionitai.inventory',
-  appName: 'AIT IMS',
+  appName: 'Plantation Prestige',
   webDir: 'native-shell/www',
   // Paper (#fbfaf7), matching the web --paper. Sets the native WebView/scroll-view background so
   // the iOS rubber-band overscroll area shows paper instead of the default black. Takes effect on

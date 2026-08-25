@@ -167,11 +167,21 @@
   color: var(--ink-faint);
 }
 
-/* Polish (2026-08-21): primary actions get depth (a subtle navy gradient + accent glow) and a
-   hover lift; inputs get an accent focus ring so a tap visibly "takes". */
+/* Primary actions get depth (a gradient in the brand accent + accent glow) and a hover lift;
+   inputs get an accent focus ring so a tap visibly "takes".
+
+   The top stop was a hardcoded navy (#114467) left from the previous brand — the ONLY colour in
+   the app not resolved through a token, which is exactly why it survived the re-skin and showed
+   as a blue sheen across the sign-in button. It is now derived from the accent, so it re-skins
+   with everything else. */
 .submit,
 .action {
-  background-image: linear-gradient(180deg, #114467 0%, var(--accent) 58%, var(--accent-deep) 100%);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 78%, #ffffff) 0%,
+    var(--accent) 58%,
+    var(--accent-deep) 100%
+  );
   box-shadow: var(--glow-accent);
 }
 @media (prefers-reduced-motion: no-preference) and (hover: hover) {

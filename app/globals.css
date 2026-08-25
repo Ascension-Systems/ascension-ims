@@ -3,24 +3,26 @@
 
    A stock-availability tool a furniture rep trusts enough to quote a customer.
    Warm, confident, operations-grade. Warm paper ground, warm near-black ink,
-   and ONE accent — Ascension IT navy — for brand, hierarchy, and interaction.
+   and ONE accent — Plantation Prestige brown — for brand, hierarchy, and interaction.
 
-   BRAND: the accent is sampled from ascensionit.com — navy #0A2C4D (their header
-   and anchor colour) with a cyan #1DB9E1 signature drawn from the logo's gradient.
-   The cyan is a highlight only (it is too light to carry text) and appears in one
-   place: the brand line under the nav bar, echoing the logo's navy→cyan sweep.
+   BRAND: Plantation Prestige brown #5C3D24 over cream, with a honey #C89A5B
+   signature — sampled from plantationprestige.com. The honey is a highlight only
+   (too light to carry text) and appears in one place: the brand line under the nav
+   bar. Every brand value lives in the tokens below, so re-skinning is a value change.
+   NOTE: shadow/glow rgba values are part of the brand too — they carried the previous
+   navy long after the hexes changed, and showed as a blue halo under buttons.
 
    STATUS IS STILL NOT CARRIED BY COLOUR. The four stock statuses are encoded
    with SHAPE, GLYPH, LABEL, BORDER TREATMENT and the left RULE (position +
-   style), so the set survives the removal of colour AND lightness. The accent
-   navy is used only for brand/interactive elements, NEVER to signal status,
-   so the colour-blind-safe property holds intact. (Supersedes D2's achromatic
-   constraint by Human decision 2026-08-20; the not-by-colour requirement stays.)
+   style), so the set survives the removal of colour AND lightness. Status hue was
+   added 2026-08-24 as an EXTRA channel, never the only one. The brand accent is
+   used only for brand/interactive elements and NEVER to signal status, so the
+   colour-blind-safe property holds intact.
 
-   Contrast: ink on paper ~17:1. --ink-soft 7.5:1. --ink-faint 5.7:1 (AA). Navy accent
-   ~13:1 on paper and as white-on-navy — well above the pine it replaced (6.1:1).
-   --ink-faint was #8a827a (3.6:1) and FAILED both AA and this project's own 7:1 floor;
-   the SKU rides on --ink-soft because it is the string a rep reads aloud to a customer.
+   Contrast: ink on paper ~17:1. The brown accent clears AA both on paper and as
+   white-on-brown. Secondary inks were darkened 2026-08-24, so --ink-soft and
+   --ink-faint both sit above the project's 7:1 floor; the SKU rides on --ink-soft
+   because it is the string a rep reads aloud to a customer.
    Mobile-first: every rule is written for 375x667 and widens upward.
    ========================================================================== */
 
@@ -413,8 +415,8 @@ li.ruleNone {
   --dur-4: 520ms;
 
   --shadow-float: 0 4px 12px rgba(28, 25, 23, 0.08), 0 14px 34px rgba(28, 25, 23, 0.10);
-  --shadow-pop: 0 6px 16px rgba(10, 44, 77, 0.16), 0 18px 44px rgba(10, 44, 77, 0.16);
-  --glow-accent: 0 8px 22px rgba(10, 44, 77, 0.22);
+  --shadow-pop: 0 6px 16px rgba(92, 61, 36, 0.16), 0 18px 44px rgba(92, 61, 36, 0.16);
+  --glow-accent: 0 8px 22px rgba(92, 61, 36, 0.22);
 }
 
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -544,5 +546,5 @@ button:disabled { opacity: 0.55; cursor: default; }
   --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 30px rgba(0, 0, 0, 0.6);
   --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.5), 0 14px 34px rgba(0, 0, 0, 0.62);
   --shadow-pop: 0 6px 16px rgba(0, 0, 0, 0.55), 0 18px 44px rgba(0, 0, 0, 0.62);
-  --glow-accent: 0 8px 22px rgba(111, 179, 236, 0.28);
+  --glow-accent: 0 8px 22px rgba(216, 180, 140, 0.28);
 }

@@ -15,7 +15,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/inventory',
     scope: '/',
     background_color: '#ffffff',
-    theme_color: '#0a2c4d',
+    theme_color: '#5c3d24',
     orientation: 'portrait',
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
