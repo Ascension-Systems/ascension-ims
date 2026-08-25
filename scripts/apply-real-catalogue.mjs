@@ -14,6 +14,7 @@
  */
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 import { createClient } from '@supabase/supabase-js'
 // Cleaning lives with the scraper, but is re-applied here so an existing pp-catalogue.json
@@ -27,6 +28,13 @@ const env = Object.fromEntries(
   }),
 )
 const svc = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+
+/** Stable string hash, used only to shuffle the fallback pool deterministically. */
+function hash(s) {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return h >>> 0
+}
 
 const PREFIX_TO_CATEGORY = {
   SEA: 'Seating', TAB: 'Tables', STO: 'Umbrellas',
@@ -49,7 +57,11 @@ const CACHE = join('scripts', '.pp-images')
 if (!existsSync(CACHE)) mkdirSync(CACHE, { recursive: true })
 
 async function photoBytes(item) {
-  const key = join(CACHE, `${Buffer.from(item.url).toString('base64url').slice(0, 40)}.bin`)
+  // Cache key is a HASH of the full URL, not a truncated base64 of it. Every product URL shares
+  // the prefix "https://www.plantationprestige.com/product-page/", whose base64 runs past 40
+  // characters — so slicing to 40 produced the SAME key for every product, and all 97 products
+  // were served the first image ever downloaded (an umbrella).
+  const key = join(CACHE, `${createHash('sha1').update(item.url).digest('hex')}.bin`)
   let buf
   if (existsSync(key)) buf = readFileSync(key)
   else {
@@ -84,7 +96,12 @@ async function main() {
   if (error) throw new Error(error.message)
 
   const cursor = {}
-  const spare = [...catalogue]
+  // The fallback pool is DETERMINISTICALLY SHUFFLED, not left in catalogue order. The catalogue
+  // sorts alphabetically and their umbrella names begin with digits ("10'", "11'", "6.5'"), so
+  // consuming it in order handed every leftover sku an umbrella — the first screen of the app
+  // was a wall of near-identical white umbrellas. Shuffling spreads chairs, tables, loungers and
+  // cushions through the catalogue instead. Keyed on the product url, so it is stable per run.
+  const spare = [...catalogue].sort((a, b) => hash(a.url) - hash(b.url))
   let spareAt = 0
   let named = 0, withPhoto = 0
   const used = new Set()

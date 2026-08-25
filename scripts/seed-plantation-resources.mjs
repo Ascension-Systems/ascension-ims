@@ -18,6 +18,7 @@
  */
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 import { createClient } from '@supabase/supabase-js'
 import { cleanName } from './scrape-plantation-catalogue.mjs'
@@ -83,19 +84,19 @@ function promoSVG({ eyebrow, title, priceWas, priceNow, save, body }) {
        <text x="555" y="${priceY + 22}" text-anchor="middle" font-family="${sans}" font-size="34" font-weight="700" letter-spacing="1" fill="${BROWN_DEEP}">${xml(save)}</text>`
     : `<text x="64" y="${priceY - 6}" font-family="${sans}" font-size="26" letter-spacing="3" fill="${SOFT}">STARTING AT</text>
        <text x="64" y="${priceY + 74}" font-family="${serif}" font-size="86" font-weight="700" fill="${BROWN}">${money(priceNow)}</text>
-       <rect x="430" y="${priceY + 6}" width="170" height="76" rx="14" fill="${HONEY}"/>
-       <text x="515" y="${priceY + 58}" text-anchor="middle" font-family="${sans}" font-size="32" font-weight="700" fill="${BROWN_DEEP}">${xml(save)}</text>`
+       ${save ? `<rect x="430" y="${priceY + 6}" width="170" height="76" rx="14" fill="${HONEY}"/>
+       <text x="515" y="${priceY + 58}" text-anchor="middle" font-family="${sans}" font-size="32" font-weight="700" fill="${BROWN_DEEP}">${xml(save)}</text>` : ''}`
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
     <rect width="${W}" height="${H}" fill="${CREAM}"/>
     <rect x="0" y="0" width="${W}" height="${PHOTO_TOP}" fill="${BROWN}"/>
     <text x="64" y="97" font-family="${serif}" font-size="42" font-weight="700" fill="#ffffff">Plantation Prestige</text>
-    <text x="${W - 56}" y="94" text-anchor="end" font-family="${sans}" font-size="20" letter-spacing="3" fill="${HONEY}">PROMOTION</text>
+    <text x="${W - 56}" y="94" text-anchor="end" font-family="${sans}" font-size="20" letter-spacing="3" fill="${HONEY}">FLYER</text>
     <text x="64" y="${PHOTO_TOP + PHOTO_H + 52}" font-family="${sans}" font-size="26" font-weight="700" letter-spacing="6" fill="${HONEY}">${xml(eyebrow.toUpperCase())}</text>
     ${titleLines.map((l, i) => `<text x="60" y="${ty + i * 78}" font-family="${serif}" font-size="70" font-weight="700" fill="${BROWN}">${xml(l)}</text>`).join('')}
     ${priceBlock}
     ${bodyLines.map((l, i) => `<text x="64" y="${priceY + 130 + i * 36}" font-family="${sans}" font-size="26" fill="${SOFT}">${xml(l)}</text>`).join('')}
     <rect x="0" y="${H - 90}" width="${W}" height="90" fill="${BROWN_DEEP}"/>
-    <text x="64" y="${H - 34}" font-family="${sans}" font-size="24" fill="#e8dccd">Order through your Plantation Prestige rep · While stock lasts</text>
+    <text x="64" y="${H - 34}" font-family="${sans}" font-size="24" fill="#e8dccd">Plantation Prestige · Specifications and finishes from your rep</text>
   </svg>`
 }
 
@@ -141,7 +142,11 @@ const CACHE = join('scripts', '.pp-images')
 if (!existsSync(CACHE)) mkdirSync(CACHE, { recursive: true })
 
 async function photoFor(item) {
-  const key = join(CACHE, `${Buffer.from(item.url).toString('base64url').slice(0, 40)}.bin`)
+  // Cache key is a HASH of the full URL, not a truncated base64 of it. Every product URL shares
+  // the prefix "https://www.plantationprestige.com/product-page/", whose base64 runs past 40
+  // characters — so slicing to 40 produced the SAME key for every product, and all 97 products
+  // were served the first image ever downloaded (an umbrella).
+  const key = join(CACHE, `${createHash('sha1').update(item.url).digest('hex')}.bin`)
   if (existsSync(key)) return readFileSync(key)
   const res = await fetch(item.image, {
     headers: { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
@@ -165,44 +170,47 @@ async function main() {
   const catalogue = JSON.parse(readFileSync('scripts/pp-catalogue.json', 'utf8'))
   const byName = (kw) => catalogue.filter((c) => c.name.toLowerCase().includes(kw))
 
-  // Promotions built around products that actually exist in their catalogue, so the photo,
-  // the collection name and the copy all agree.
-  const geneva = byName('geneva')[0] ?? catalogue[0]
-  const montego = byName('montego')[0] ?? catalogue[1]
-  const adirondack = byName('adirondack')[0] ?? catalogue[2]
+  /* THEIR OWN FLYERS.
+   *
+   * plantationprestige.com/flyers publishes twelve marketing pieces — Marcella Cabana, Laguna
+   * Collection, Sunbrella Deep Seating, the Logo Umbrella Program and so on. Seeding our library
+   * with invented promotions ("Geneva Summer Sale") put fictional marketing in front of the
+   * people who wrote the real thing. These are their actual flyer subjects; each one is paired
+   * with a catalogue photograph matching its topic so the artwork and the title agree.
+   */
+  const pickPhoto = (re, fallbackIndex = 0) =>
+    catalogue.find((c) => re.test(cleanName(c.name))) ?? catalogue[fallbackIndex]
 
-  const promos = [
-    {
-      title: `${geneva.name.replace(/^[\d.'" ]*/, '').split(' ').slice(0, 2).join(' ')} Collection — Summer Sale`,
-      description: 'Seasonal pricing on the Geneva shade collection through the end of summer.',
-      item: geneva,
-      svg: promoSVG({
-        eyebrow: 'Limited-time', title: 'Geneva Summer Sale',
-        priceWas: priceFor(geneva.name), priceNow: Math.round(priceFor(geneva.name) * 0.8), save: '20% OFF',
-        body: 'Every Geneva umbrella reduced through the end of the season. Ask your rep to lock in pricing for your property.',
-      }),
-    },
-    {
-      title: 'Montego Umbrellas — Floor Model Clearance',
-      description: 'Showroom Montego umbrellas reduced while stock lasts.',
-      item: montego,
-      svg: promoSVG({
-        eyebrow: 'Clearance', title: 'Montego Clearance',
-        priceWas: priceFor(montego.name), priceNow: Math.round(priceFor(montego.name) * 0.65), save: 'SAVE 35%',
-        body: 'Showroom Montego umbrellas reduced to clear. One-of-a-kind pieces — first come, first served.',
-      }),
-    },
-    {
-      title: `New Arrival: ${adirondack.name}`,
-      description: 'Just landed. Spec sheets in the library below.',
-      item: adirondack,
-      svg: promoSVG({
-        eyebrow: 'New arrival', title: adirondack.name,
-        priceNow: priceFor(adirondack.name), save: 'NEW',
-        body: 'Just landed and ready to order for the season. Full specifications in the library below.',
-      }),
-    },
+  const FLYERS = [
+    { title: 'Marcella Cabana', eyebrow: 'Featured', match: /marcella/i,
+      body: 'The Marcella cabana, built for poolside and resort installations. Full specifications and finish options from your rep.' },
+    { title: 'Laguna Collection', eyebrow: 'Collection', match: /laguna/i,
+      body: 'The Laguna collection, in stock and ready to specify for hospitality and multi-family projects.' },
+    { title: 'Sunbrella Deep Seating', eyebrow: 'Fabrics', match: /sofa|loveseat|club chair|deep|sectional|middle section/i,
+      body: 'Deep seating in solution-dyed Sunbrella acrylic. Fade-resistant, cleanable, and rated for commercial use.' },
+    { title: 'Logo Umbrella Program', eyebrow: 'Program', match: /umbrella/i,
+      body: 'Custom-printed umbrellas carrying your property or brand mark. Ask your rep about minimums and lead times.' },
+    { title: 'Custom Acrylic Table Tops', eyebrow: 'Custom', match: /table top|acrylic|table/i,
+      body: 'Acrylic table tops cut to your specification, in the finishes and edge profiles your project calls for.' },
+    { title: 'Poolside Finishes and Slings', eyebrow: 'Finishes', match: /poolside|sling/i,
+      body: 'The poolside finish and sling range, selected for chlorine, salt and sun exposure.' },
   ]
+
+  const promos = FLYERS.map((f) => {
+    const item = pickPhoto(f.match)
+    return {
+      title: f.title,
+      description: f.body.split('.')[0] + '.',
+      item,
+      svg: promoSVG({
+        eyebrow: f.eyebrow,
+        title: f.title,
+        priceNow: priceFor(item.name),
+        save: '',
+        body: f.body,
+      }),
+    }
+  })
 
   if (process.env.PREVIEW) {
     const dir = process.env.PREVIEW

@@ -51,9 +51,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
       'content-type': 'image/jpeg',
       'content-disposition': 'inline',
       'x-content-type-options': 'nosniff',
-      // Catalogue imagery is stable and re-fetched constantly while scrolling; a private cache
-      // keeps a rep on a phone from re-downloading every thumbnail on each render.
-      'cache-control': 'private, max-age=3600',
+      // Long enough that scrolling a 97-row list does not re-download every thumbnail, short
+      // enough that a corrected photo appears quickly. It was an hour, which meant a catalogue
+      // fix stayed invisible on any device that had already loaded the old image — the photo
+      // is served from a stable URL (/api/products/SKU/image), so the URL cannot signal a
+      // change on its own.
+      'cache-control': 'private, max-age=60, must-revalidate',
     },
   })
 }

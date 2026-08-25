@@ -31,6 +31,29 @@ function matchesStatus(
   return status === filter
 }
 
+/**
+ * Name order for a catalogue where many products are named by a dimension first
+ * ("10' Square Edison Cantilever", "6.5' Square Geneva Umbrella").
+ *
+ * A plain localeCompare sorts digits before letters, so every size-led name collected at the
+ * very top — the catalogue opened on ten near-identical umbrellas before reaching a single
+ * chair or table. Size-led names now sort AFTER word-led ones, and among themselves they sort
+ * numerically (6.5' before 10', not "10" before "6.5" as string order would have it).
+ */
+function leadingSize(name: string): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*['\u2032"]?/.exec(name.trim())
+  return m && m[1] !== undefined ? Number(m[1]) : null
+}
+
+function byProductName(a: string, b: string): number {
+  const sa = leadingSize(a)
+  const sb = leadingSize(b)
+  if (sa === null && sb !== null) return -1
+  if (sa !== null && sb === null) return 1
+  if (sa !== null && sb !== null && sa !== sb) return sa - sb
+  return a.localeCompare(b)
+}
+
 export function InventoryList({
   rows,
   categories,
@@ -90,7 +113,7 @@ export function InventoryList({
 
     const sorted = [...filtered]
     if (sort === 'name') {
-      sorted.sort((a, b) => a.name.localeCompare(b.name))
+      sorted.sort((a, b) => byProductName(a.name, b.name))
     } else if (sort === 'least-available') {
       sorted.sort((a, b) => a.qty_available - b.qty_available || a.name.localeCompare(b.name))
     } else {
