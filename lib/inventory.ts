@@ -19,7 +19,22 @@ export async function getInventory(): Promise<{ rows: InventoryViewRow[]; error:
   if (error) {
     return { rows: [], error: error.message }
   }
-  return { rows: (data ?? []) as InventoryViewRow[], error: null }
+  const rows = (data ?? []) as InventoryViewRow[]
+
+  // Photo + website link live on `products` (0023); v_inventory predates them. Merging here
+  // avoids reshaping the view — which owns the availability maths — for two display fields.
+  // One extra round trip over the same ~97 rows, and a failure degrades to "no photo, no link"
+  // rather than losing the inventory itself.
+  const { data: extras } = await supabase.from('products').select('sku, image_path, product_url')
+  if (extras?.length) {
+    const bySku = new Map(extras.map((e) => [e.sku as string, e]))
+    for (const row of rows) {
+      const extra = bySku.get(row.sku)
+      row.image_path = (extra?.image_path as string | null) ?? null
+      row.product_url = (extra?.product_url as string | null) ?? null
+    }
+  }
+  return { rows, error: null }
 }
 
 /** The distinct category list, derived rather than queried separately. */

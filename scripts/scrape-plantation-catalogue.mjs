@@ -17,11 +17,38 @@
  *   node scripts/scrape-plantation-catalogue.mjs [count]     -> writes scripts/pp-catalogue.json
  */
 import { writeFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 const WANT = Number(process.argv[2] ?? 110)
 const CONCURRENCY = 6
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
 const SITEMAP = 'https://www.plantationprestige.com/store-products-sitemap.xml'
+
+/**
+ * Normalise a product name for display in our UI.
+ *
+ * Two classes of problem, both real in the source data:
+ *   1. HTML ENTITIES. The JSON-LD carries `&quot;` for inch marks (96 of ~290 names), and
+ *      JSON.parse does not decode HTML entities — so 'Bali Dining Table 36&quot; Square'
+ *      would render literally. Decoded here rather than in the UI, so the stored value is
+ *      already correct wherever it is read.
+ *   2. TYPOS in the published catalogue ("Barstoool", "Bartsool") and stray double spaces.
+ *      We correct these on our side rather than mirror them — a demo that reproduces a
+ *      client's typos reads as our sloppiness, not theirs.
+ */
+const ENTITIES = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ', ndash: '–', mdash: '—' }
+const TYPOS = [
+  [/\bbarstoool\b/gi, 'Barstool'],
+  [/\bbartsool\b/gi, 'Barstool'],
+  [/\bstoool\b/gi, 'Stool'],
+]
+export function cleanName(raw) {
+  let s = String(raw)
+  s = s.replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+  s = s.replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m)
+  for (const [re, to] of TYPOS) s = s.replace(re, to)
+  return s.replace(/\s+/g, ' ').trim()
+}
 
 async function get(url) {
   const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(20_000) })
@@ -47,7 +74,7 @@ function parseProduct(html, url) {
         const raw = Array.isArray(c.image) ? c.image[0] : c.image
         const image =
           typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? (raw.url ?? raw.contentUrl ?? null) : null
-        return { name: String(c.name).trim(), url, image: image ? String(image) : null }
+        return { name: cleanName(c.name), url, image: image ? String(image) : null }
       }
     }
   }
@@ -90,7 +117,11 @@ async function main() {
   out.slice(0, 8).forEach((p) => console.log(`  - ${p.name}`))
 }
 
-main().catch((e) => {
-  console.error('ERROR:', e.message)
-  process.exit(1)
-})
+// Only crawl when run directly. apply-real-catalogue.mjs imports cleanName() from here, and
+// importing a module must not kick off a 300-page scrape as a side effect.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error('ERROR:', e.message)
+    process.exit(1)
+  })
+}

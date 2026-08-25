@@ -55,6 +55,19 @@ export function InventoryRow({
         aria-controls={panelId}
         onClick={onToggle}
       >
+        {/* Product photo. Decorative here — the name beside it is the label — so alt is empty
+            and a missing photo simply collapses rather than leaving a broken-image box. */}
+        {row.image_path ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className={styles.thumb}
+            src={`/api/products/${encodeURIComponent(row.sku)}/image`}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+
         <span className={styles.identity}>
           <span className={styles.name}>{row.name}</span>
           <span className={styles.sku}>{row.sku}</span>
@@ -161,6 +174,21 @@ export function InventoryRow({
                 ) : null}
               </p>
             </div>
+          ) : null}
+
+          {/* "You hit something else and it links back to the Plantation Prestige website"
+              (Levon, 2026-08-24). Rendered only when the product actually has a public page —
+              he flagged that not everything they sell is online — so this is never a dead link.
+              Opens in a new context rather than navigating the app away from the catalogue. */}
+          {row.product_url ? (
+            <a
+              className={styles.productLink}
+              href={row.product_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on plantationprestige.com ↗
+            </a>
           ) : null}
 
           {/* Step 2 — recording a commitment. Available to every provisioned account: the

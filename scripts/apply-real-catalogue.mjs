@@ -16,6 +16,9 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { createClient } from '@supabase/supabase-js'
+// Cleaning lives with the scraper, but is re-applied here so an existing pp-catalogue.json
+// written before the fix is still corrected without needing a re-scrape.
+import { cleanName } from './scrape-plantation-catalogue.mjs'
 
 const DRY = process.argv.includes('--dry-run')
 const env = Object.fromEntries(
@@ -73,7 +76,7 @@ async function main() {
   if (!hasNewColumns) console.log('NOTE: migration 0023 not applied — writing names/categories only.\n')
 
   const pools = {}
-  for (const c of catalogue) (pools[categoryOf(c.name)] ??= []).push(c)
+  for (const c of catalogue) (pools[categoryOf(cleanName(c.name))] ??= []).push(c)
   console.log('real products available per category:',
     JSON.stringify(Object.fromEntries(Object.entries(pools).map(([k, v]) => [k, v.length]))))
 
@@ -96,7 +99,8 @@ async function main() {
     if (!item) continue
     used.add(item.url)
 
-    const patch = { name: item.name, category: categoryOf(item.name) }
+    const display = cleanName(item.name)
+    const patch = { name: display, category: categoryOf(display) }
 
     if (hasNewColumns && !DRY) {
       patch.product_url = item.url

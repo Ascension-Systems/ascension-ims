@@ -51,4 +51,14 @@ export type InventoryViewRow = {
   override_at: string | null
   override_by: string | null
   updated_at: string
+  /**
+   * Catalogue extras joined in by lib/inventory.ts rather than exposed by v_inventory.
+   *
+   * They live on `products` (migration 0023) and the view predates them; merging in the app
+   * layer keeps the view — and the availability maths it owns — untouched. Both are optional
+   * because a product may legitimately have neither: not everything the client sells is
+   * photographed, and Levon flagged that not everything is published on their website.
+   */
+  image_path?: string | null
+  product_url?: string | null
 }

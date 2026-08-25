@@ -10,7 +10,7 @@
   text-align: right;
   /* Keeps the figure from being squeezed by a long product name. */
   flex: 0 0 auto;
-  min-width: 92px;
+  min-width: 76px;
 }
 
 .label {
@@ -20,7 +20,7 @@
   text-transform: uppercase;
   color: var(--ink-faint);
   /* A long label ("AVAILABLE (QUICKBOOKS)") wraps rather than widening the column. */
-  max-width: 104px;
+  max-width: 88px;
   line-height: 1.25;
 }
 
