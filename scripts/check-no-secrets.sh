@@ -220,8 +220,14 @@ fi
 #  2. The property that matters is NON-ROUTABLE, and `.invalid` is IANA-reserved in full, so
 #     `hacker@evil.invalid` is exactly as unroutable as `x@example.invalid`. Hardcoding the
 #     `example.invalid` spelling failed addresses that already satisfied the actual requirement.
+#  3. Apple's retina asset convention (`AppIcon-512@2x.png`) matches the email shape exactly:
+#     local part `AppIcon-512`, "domain" `2x`, "TLD" `png`. That is a filename, not an address,
+#     and it made this rule fail on the icon generator. Excluding `@<digits>x.` is narrow enough
+#     that it cannot hide a real address -- no mailbox lives at a purely numeric-plus-x domain.
 emails="$(grep -rIoE "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}" \
-  supabase/seed verify scripts "${EXCLUDES[@]}" 2>/dev/null | grep -vE '\.invalid([^A-Za-z0-9]|$)' || true)"
+  supabase/seed verify scripts "${EXCLUDES[@]}" 2>/dev/null \
+  | grep -vE '\.invalid([^A-Za-z0-9]|$)' \
+  | grep -vE '@[0-9]+x\.' || true)"
 if [ -n "$emails" ]; then
   report "seed/verify emails use the reserved example.invalid domain" "$emails"
 else
