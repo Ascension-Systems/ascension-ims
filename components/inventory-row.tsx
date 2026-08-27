@@ -63,7 +63,14 @@ export function InventoryRow({
             className={styles.thumb}
             src={`/api/products/${encodeURIComponent(row.sku)}/image`}
             alt=""
-            loading="lazy"
+            /* NOT loading="lazy". The lazy trigger failed to fire for these thumbnails —
+               including for rows already inside the viewport — so the catalogue rendered with
+               no photographs at all, which was hit during a live client demo. A controlled test
+               on the deployed build showed the identical URL loading immediately when requested
+               eagerly and never loading when requested lazily. The images are small (catalogue
+               shots are resized to ~7-20KB each), so eager loading costs far less than the
+               failure mode it removes. components/sheet-list.tsx was changed the same way
+               earlier for the same symptom. */
             decoding="async"
           />
         ) : null}
