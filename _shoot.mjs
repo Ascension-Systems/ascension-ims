@@ -44,10 +44,12 @@ const SHOTS=JSON.parse(process.env.SHOTS)
 for(const s of SHOTS){
   await send('Emulation.setDeviceMetricsOverride',{width:s.w,height:s.h,deviceScaleFactor:2,mobile:!!s.mobile})
   await send('Page.navigate',{url:`https://${HOST}${s.path}`})
-  await new Promise(r=>setTimeout(r, s.wait ?? 9000))
-  if(s.js) await send('Runtime.evaluate',{expression:s.js,awaitPromise:true})
+  await new Promise(r=>setTimeout(r, s.wait ?? 6000))
+  if(s.js) await Promise.race([send('Runtime.evaluate',{expression:s.js}), new Promise(r=>setTimeout(r,4000))])
   if(s.after) await new Promise(r=>setTimeout(r,s.after))
-  const {result}=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:!!s.full})
+  const shot=await Promise.race([send('Page.captureScreenshot',{format:'png'}), new Promise(r=>setTimeout(()=>r(null),20000))])
+  if(!shot){console.log('TIMEOUT',s.name);continue}
+  const {result}=shot
   writeFileSync(`/tmp/shots/${s.name}.png`, Buffer.from(result.data,'base64'))
   console.log('captured', s.name, s.path, `${s.w}x${s.h}`)
 }
