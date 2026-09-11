@@ -18,10 +18,18 @@
  *
  * Exit code 0 only if all four pass AND the emitted assertion ids match verify/lib/manifest.mjs
  * in both directions.
+ *
+ * THE EXIT CODE IS REAL NOW, AND WAS NOT BEFORE. This file used to set `process.exitCode` and
+ * the process still exited 0 every time, because importing `embedded-postgres` arms an
+ * `async-exit-hook` that calls `process.exit(0)` on natural drain. A failing run was therefore
+ * indistinguishable from a passing one to anything reading the exit status. Every exit below
+ * goes through `exitWith()` — see verify/lib/exit-code.mjs for the mechanism and its self-test.
+ * Do not replace an `exitWith()` call with `process.exitCode = ...`; that is the defect.
  */
 
 import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, renderMigrationScope } from './lib/harness.mjs'
 import { STATUS } from './lib/report.mjs'
+import { exitWith } from './lib/exit-code.mjs'
 import { MANIFEST } from './lib/manifest.mjs'
 import {
   checkDrift,
@@ -89,8 +97,7 @@ async function main() {
 
   if (hardError) {
     process.stdout.write(`\nHARNESS ERROR: ${hardError.stack ?? hardError.message}\n`)
-    process.exitCode = 1
-    return
+    await exitWith(1)
   }
 
   const failed = reports.filter((r) => !r.ok)
@@ -168,11 +175,16 @@ async function main() {
    * ---------------------------------------------------------------- */
   process.stdout.write(renderDispositionBlock(totals) + '\n')
 
-  process.exitCode = failed.length === 0 && drift.ok && integrity.ok && sums.ok ? 0 : 1
+  const ok = failed.length === 0 && drift.ok && integrity.ok && sums.ok
+  // A single machine-readable line, so a caller that cannot see an exit code (a log scrape,
+  // a CI annotation) still gets the verdict. Belt-and-braces with exitWith() below, not a
+  // substitute for it.
+  process.stdout.write(`\nVERIFY-LOCAL-VERDICT: ${ok ? 'PASS' : 'FAIL'} (${totalPassed}/${totalExecuted} executed)\n`)
+  await exitWith(ok ? 0 : 1)
 }
 
 main().catch(async (err) => {
   await shutdownDatabase()
   process.stdout.write(`\nHARNESS ERROR: ${err.stack ?? err.message}\n`)
-  process.exitCode = 1
+  await exitWith(1)
 })
