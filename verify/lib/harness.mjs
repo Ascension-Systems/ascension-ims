@@ -175,6 +175,71 @@ export function migrationFiles() {
     .sort()
 }
 
+/* ==================================================================== *
+ * DECLARED EXCLUSIONS — the local scope gap, stated instead of silent
+ *
+ * A migration listed here CANNOT be applied to a local PostgreSQL server, for a
+ * platform reason named per entry. This list exists because the alternative is
+ * worse in a specific way: bootstrap() applies each file as ONE multi-statement
+ * query, so before this list a single unsupported statement failed its whole file
+ * and aborted the run, and the four attacks under verify/ therefore did not
+ * execute at all. A number that got smaller is not the same thing as a pass, so
+ * every skip is declared here, printed on every run with its reason, and
+ * length-asserted by verify/run-security.mjs.
+ *
+ * THE BAR FOR ADDING AN ENTRY. Only a capability the local engine cannot provide
+ * and a shim cannot supply. "The test fails" is never a reason. Anything that a
+ * shim CAN supply belongs in verify/shim/00_auth_shim.sql instead -- that is how
+ * storage.buckets/storage.objects were handled rather than excluding 0015 and
+ * 0023. Adding an entry widens the local blind spot, so it needs the same
+ * scrutiny as deleting an assertion.
+ * ==================================================================== */
+
+export const MIGRATION_EXCLUSIONS = [
+  {
+    file: '0018_simulated_live_feed.sql',
+    reason:
+      'requires the pg_cron extension (0018:25 CREATE EXTENSION IF NOT EXISTS pg_cron), which is a ' +
+      'Supabase-platform extension not bundled with embedded-postgres. IF NOT EXISTS only skips when ' +
+      'the extension is already installed, so with no control file present the statement errors 0A000 ' +
+      'and cannot be shimmed. The unguarded SELECT cron.schedule(...) at 0018:92 would fail next.',
+    cost:
+      "its only non-cron content is drift_inventory(), a demo drift simulator. No local attack and no " +
+      'security regression exercises it, and 0023:90 unschedules the job anyway.',
+  },
+]
+
+/** `{ all, applied, excluded }`. `excluded` entries are the declared list, filtered to files present. */
+export function migrationPlan() {
+  const all = migrationFiles()
+  const excludedNames = new Set(MIGRATION_EXCLUSIONS.map((e) => e.file))
+  return {
+    all,
+    applied: all.filter((f) => !excludedNames.has(f)),
+    excluded: MIGRATION_EXCLUSIONS,
+  }
+}
+
+/**
+ * The exclusion block both local runners print. Identical text in both, so the scope gap
+ * cannot be described one way in one run and another way in the other.
+ */
+export function renderMigrationScope(plan = migrationPlan()) {
+  const lines = [
+    `Migrations    : ${plan.applied.length} applied of ${plan.all.length} present in supabase/migrations/, ` +
+      `${plan.excluded.length} excluded`,
+  ]
+  for (const e of plan.excluded) {
+    lines.push(`                EXCLUDED ${e.file}`)
+    lines.push(`                  reason: ${e.reason}`)
+    if (e.cost) lines.push(`                  cost:   ${e.cost}`)
+  }
+  if (plan.excluded.length === 0) {
+    lines.push('                (no exclusions — every migration present applied locally)')
+  }
+  return lines.join('\n')
+}
+
 /**
  * Resets the database to a known state and applies everything from scratch.
  *
@@ -213,7 +278,9 @@ export async function bootstrap(db, client) {
   // every local path; there is no non-shim path here any more.
   await client.query(readSql(SHIM))
 
-  for (const f of migrationFiles()) {
+  // Every file present EXCEPT the declared exclusions above. The skip is never silent:
+  // renderMigrationScope() prints it on every run and run-security.mjs asserts the list length.
+  for (const f of migrationPlan().applied) {
     try {
       await client.query(readSql(join(MIGRATIONS_DIR, f)))
     } catch (err) {

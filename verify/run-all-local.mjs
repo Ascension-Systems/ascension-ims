@@ -20,7 +20,7 @@
  * in both directions.
  */
 
-import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, migrationFiles } from './lib/harness.mjs'
+import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, renderMigrationScope } from './lib/harness.mjs'
 import { STATUS } from './lib/report.mjs'
 import { MANIFEST } from './lib/manifest.mjs'
 import {
@@ -61,7 +61,9 @@ async function main() {
       PATH_CAVEAT.trimEnd().replace(/^\n/, ''),
       '',
       `Database path : ${db.label}`,
-      `Migrations    : ${migrationFiles().length} files, applied from supabase/migrations/ in numeric order`,
+      // Applied-vs-present, with every declared exclusion named. A count that got smaller
+      // because a file was skipped must never read as a count that passed.
+      renderMigrationScope(),
       `Seed          : supabase/seed/0001 + 0002 (0003 excluded — it depends on a profile existing)`,
       'Target        : a LOCAL Postgres. Nothing here touches the hosted Supabase project.',
       'Hosted path   : `npm run verify`. This command is not a substitute for it and never',
