@@ -34,8 +34,8 @@
     "check:sql:selftest": "node scripts/check-sql.mjs --self-test",
     "check:routes": "node scripts/check-routes.mjs",
     "check:routes:selftest": "node scripts/check-routes.mjs --self-test",
-    "check:encoding": "sh ../../tools/check-encoding.sh app components lib scripts verify supabase",
-    "check:encoding:selftest": "sh ../../tools/check-encoding.sh --self-test",
+    "check:encoding": "sh scripts/check-encoding.sh app components lib scripts verify supabase",
+    "check:encoding:selftest": "sh scripts/check-encoding.sh --self-test",
     "check:all": "npm run check:encoding && npm run check:sql && npm run check:routes && npm run check:secrets",
     "check:selftest": "npm run check:encoding:selftest && npm run check:sql:selftest && npm run check:routes:selftest",
     "preverify": "npm run check:all",
@@ -49,7 +49,7 @@
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "framer-motion": "^13.1.1",
-    "next": "15.5.23",
+    "next": "15.5.27",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "0.0.1"
@@ -62,12 +62,12 @@
     "@types/react-dom": "19.2.4",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.5.23",
+    "eslint-config-next": "15.5.27",
     "pg": "8.23.0",
     "typescript": "5.9.3"
   },
   "overrides": {
     "postcss": "8.5.26",
-    "sharp": "0.35.3"
+    "sharp": "0.35.4"
   }
 }
