@@ -17,9 +17,10 @@
  * built-ins, extension-provided objects and auth.* live outside these files.
  */
 import { readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '')
 const DIR = join(ROOT, 'supabase', 'migrations')
 const SELF_TEST = process.argv.includes('--self-test')
 

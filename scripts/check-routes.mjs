@@ -19,9 +19,10 @@
  * resolved. A number that suddenly drops is the signal that the check stopped reaching something.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { join, relative } from 'node:path'
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '')
 const SELF_TEST = process.argv.includes('--self-test')
 
 const walk = (dir, out = []) => {

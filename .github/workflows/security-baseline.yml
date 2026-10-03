@@ -1,0 +1,97 @@
+name: Security baseline
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-baseline-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  security-baseline:
+    name: security-baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SEMGREP_SEND_METRICS: 'off'
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Check out the candidate without retained credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Node from netlify.toml
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Prepare evidence directory
+        run: |
+          EVIDENCE="$RUNNER_TEMP/ims-evidence"
+          echo "EVIDENCE=$EVIDENCE" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE"
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "ref=$GITHUB_REF"
+            echo "event=$GITHUB_EVENT_NAME"
+            echo "run=$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+          } > "$EVIDENCE/run.txt"
+
+      - name: Install dependencies from the lockfile
+        run: npm ci --ignore-scripts --no-fund --no-audit
+
+      - name: Install verified pinned tools (Semgrep, Gitleaks)
+        run: bash security-baseline/ci/install-tools.sh "$RUNNER_TEMP/ascension-tools"
+
+      - name: Repository hygiene (encoding, SQL, routes, secrets)
+        run: |
+          npm run check:selftest 2>&1 | tee "$EVIDENCE/check-selftest.txt"
+          npm run check:all 2>&1 | tee "$EVIDENCE/check-all.txt"
+
+      - name: Typecheck
+        run: npm run typecheck 2>&1 | tee "$EVIDENCE/typecheck.txt"
+
+      - name: Lint
+        run: npm run lint 2>&1 | tee "$EVIDENCE/lint.txt"
+
+      - name: Secret scan (full history)
+        run: |
+          "$RUNNER_TEMP/ascension-tools/gitleaks" git . --redact --no-banner \
+            --report-format json --report-path "$EVIDENCE/gitleaks.json"
+
+      - name: Static analysis
+        run: |
+          "$RUNNER_TEMP/ascension-tools/venv/bin/semgrep" scan \
+            --config security-baseline/ci/semgrep.yml --error --metrics off \
+            --json --output "$EVIDENCE/semgrep.json" app components lib middleware.ts netlify
+
+      - name: Dependency audit (blocks on high and critical)
+        run: |
+          npm audit --omit=dev --json > "$EVIDENCE/npm-audit.json" || true
+          npm audit --omit=dev --audit-level=high
+
+      - name: SBOM (CycloneDX)
+        if: ${{ always() }}
+        run: npm sbom --sbom-format cyclonedx --omit=dev > "$EVIDENCE/sbom.cdx.json"
+
+      - name: Retain evidence even when a check fails
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: security-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ims-evidence/
+          if-no-files-found: error
+          retention-days: 30
+# Test-only authority: no deployment, OIDC token, environment or production secrets.
+# Netlify deploys separately from main. Merge protection is the ruleset in
+# .github/rulesets/default-branch.json, applied in repository settings.

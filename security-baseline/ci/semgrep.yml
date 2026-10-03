@@ -1,0 +1,58 @@
+rules:
+  # Carried over from Ascension-Systems/tortuga-claudex-loop security-baseline (190dff7).
+  - id: javascript-dynamic-evaluation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Avoid evaluating generated or externally supplied code.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+  - id: javascript-tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Keep server certificate verification enabled.
+    pattern: '{..., rejectUnauthorized: false, ...}'
+  - id: javascript-shell-execution
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Review shell command construction; prefer an argument vector.
+    pattern-either:
+      - pattern: child_process.exec(...)
+      - pattern: child_process.execSync(...)
+  - id: javascript-unsafe-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Review HTML construction and prove untrusted values are escaped before insertion.
+    pattern: $ELEMENT.innerHTML = $VALUE
+
+  # IMS-specific.
+  - id: react-dangerously-set-inner-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: dangerouslySetInnerHTML needs proof that the value is not user- or source-controlled.
+    pattern: <$EL dangerouslySetInnerHTML={...} />
+  - id: service-role-key-outside-admin-client
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: The service-role key may be read only in lib/supabase/admin.ts.
+    pattern: process.env.SUPABASE_SERVICE_ROLE_KEY
+    paths:
+      exclude:
+        - lib/supabase/admin.ts
+        - lib/env.ts
+        - verify/
+        - scripts/
+  - id: next-public-secret-name
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: A NEXT_PUBLIC_ variable is shipped to the browser; it must not hold a secret.
+    pattern-regex: NEXT_PUBLIC_[A-Z_]*(SECRET|SERVICE_ROLE|PRIVATE)[A-Z_]*
+  - id: supabase-rpc-from-client-component
+    languages: [typescript]
+    severity: WARNING
+    message: Admin RPCs must be called server-side; confirm the database guard is authoritative.
+    patterns:
+      - pattern-inside: |
+          'use client'
+          ...
+      - pattern: $SUPA.rpc('apply_inventory_sync', ...)
