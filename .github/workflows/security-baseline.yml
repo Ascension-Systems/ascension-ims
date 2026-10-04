@@ -8,6 +8,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# Explicit bash runs every step with `-eo pipefail`. GitHub's unspecified default is
+# `bash -e` WITHOUT pipefail, which would let `failing-check | tee log` pass.
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: security-baseline-${{ github.ref }}
   cancel-in-progress: true
