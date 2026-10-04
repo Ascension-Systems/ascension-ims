@@ -85,6 +85,15 @@ jobs:
           npm audit --omit=dev --json > "$EVIDENCE/npm-audit.json" || true
           npm audit --omit=dev --audit-level=high
 
+      - name: Production-only install keeps runtime native modules
+        run: |
+          # Guards lockfile classification: a production dependency's optional native
+          # subtree marked dev-only would be dropped by `npm ci --omit=dev` on deploy.
+          prod="$RUNNER_TEMP/prod-install"
+          mkdir -p "$prod"
+          cp package.json package-lock.json "$prod/"
+          (cd "$prod" && npm ci --omit=dev --ignore-scripts --no-fund --no-audit             && node -e "require('sharp')({create:{width:1,height:1,channels:3,background:'#fff'}}).png().toBuffer().then(()=>console.log('sharp ok'))")             2>&1 | tee "$EVIDENCE/prod-install.txt"
+
       - name: SBOM (CycloneDX)
         if: ${{ always() }}
         run: npm sbom --sbom-format cyclonedx --omit=dev > "$EVIDENCE/sbom.cdx.json"
