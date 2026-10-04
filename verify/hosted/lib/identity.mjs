@@ -181,25 +181,43 @@ export const VERDICT = {
   PROCEED: 'PROCEED',
   NOT_ATTRIBUTED: 'NOT_ATTRIBUTED',
   ATTRIBUTED_TO_TEST_IDENTITY: 'ATTRIBUTED_TO_TEST_IDENTITY',
+  ATTRIBUTED_TO_NON_ADMIN: 'ATTRIBUTED_TO_NON_ADMIN',
   UNREADABLE: 'UNREADABLE',
 }
 
+/**
+ * FAIL CLOSED. PROCEED only on a POSITIVE result: SEA-9003 exists exactly once, its
+ * override_by resolves to exactly one profile, that profile is an admin, and its email is not
+ * a verification identity. Any failed or ambiguous read is UNREADABLE, never PROCEED.
+ */
 export async function attributionVerdict(cfg, identities) {
   const svc = identities.service
   const row = await selectRows(cfg, svc, 'inventory', 'select=override_by&sku=eq.SEA-9003&location=eq.default')
   if (!row.ok) {
-    return { verdict: VERDICT.UNREADABLE, detail: `${row.code}: ${row.message}` }
+    return { verdict: VERDICT.UNREADABLE, detail: `inventory read failed: ${row.code}: ${row.message}` }
   }
-  const by = row.rows[0]?.override_by ?? null
+  if (row.rows.length !== 1) {
+    return { verdict: VERDICT.UNREADABLE, detail: `expected exactly 1 SEA-9003 row, observed ${row.rows.length}` }
+  }
+  const by = row.rows[0].override_by ?? null
   if (!by) {
     return { verdict: VERDICT.NOT_ATTRIBUTED, detail: 'SEA-9003 has no override_by' }
   }
-  const owner = await selectRows(cfg, svc, 'profiles', `select=email&id=eq.${encodeURIComponent(by)}`)
-  const email = owner.ok ? (owner.rows[0]?.email ?? null) : null
-  if (email && TEST_EMAILS.includes(email)) {
-    return { verdict: VERDICT.ATTRIBUTED_TO_TEST_IDENTITY, detail: `SEA-9003 is credited to ${email}` }
+  const owner = await selectRows(cfg, svc, 'profiles', `select=email,role&id=eq.${encodeURIComponent(by)}`)
+  if (!owner.ok) {
+    return { verdict: VERDICT.UNREADABLE, detail: `profiles read failed: ${owner.code}: ${owner.message}` }
   }
-  return { verdict: VERDICT.PROCEED, detail: 'SEA-9003 is credited to a real admin' }
+  if (owner.rows.length !== 1) {
+    return { verdict: VERDICT.UNREADABLE, detail: `SEA-9003's override_by ${by} resolves to ${owner.rows.length} profiles` }
+  }
+  const { email, role } = owner.rows[0]
+  if (!email || TEST_EMAILS.includes(email.toLowerCase())) {
+    return { verdict: VERDICT.ATTRIBUTED_TO_TEST_IDENTITY, detail: `SEA-9003 is credited to ${email ?? '(no email)'}` }
+  }
+  if (role !== 'admin') {
+    return { verdict: VERDICT.ATTRIBUTED_TO_NON_ADMIN, detail: `SEA-9003 is credited to ${email}, whose role is ${role}` }
+  }
+  return { verdict: VERDICT.PROCEED, detail: `SEA-9003 is credited to the admin ${email}` }
 }
 
 /** The refusal text for each verdict. Actionable, and specific about which state it saw. */
@@ -217,6 +235,7 @@ export function verdictMessage(v) {
         'Provision the real admin, have them sign in, paste supabase/seed/0003_seed_demo_delta.sql,',
         'then re-run. See README.md, "Running this against the hosted Supabase project".',
       ].join('\n')
+    case VERDICT.ATTRIBUTED_TO_NON_ADMIN:
     case VERDICT.ATTRIBUTED_TO_TEST_IDENTITY:
       return [
         `REFUSED: ${v.detail}.`,

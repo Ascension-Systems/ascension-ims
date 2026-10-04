@@ -191,8 +191,8 @@ committed), the target of a committed-figure sync. `2.8` creates a second admin 
 `verify/hosted/01-rls-bypass.mjs` (hosted) and `verify/01-rls-bypass.mjs` (local).
 
 > **Hosted:** the assertions run live over PostgREST against real GoTrue sessions, with one
-> exception: `1.12` is a labelled **STATIC** check of
-> `supabase/migrations/0008_inventory_view.sql`, because `pg_class` is not exposed; no live
+> exception: `1.12` is a labelled **STATIC** check of the effective `v_inventory` definition
+> in the migration source (currently `0025`), because `pg_class` is not exposed; no live
 > proxy for it exists over this channel and none is invented. The counts are in the
 > disposition block in §8. Every write targets `KYV-0001`/`KYV-0002`/`KYV-0003` at
 > `location = 'kyv-verify'` — the `SEA-*` SKUs named in the table below are the local path's
@@ -338,7 +338,7 @@ claimed to live. Hiding a button is not access control and is not tested here.
 | 4.10b | `POST /api/sync` with **no** session, reaching the route handler's own 401 | Route handler guard (`app/api/sync/route.ts`) | **NOT EXECUTED — unreachable: middleware refuses first** |
 | 4.11 | Same as 4.6 but as `anon` | `EXECUTE` revoked from `anon` (`0012`) | `42501` — the grant refuses before the function is entered |
 | 4.12 | Control: 4.1, 4.4 and 4.6 as `admin` | — | All **succeed**. Proves the tests are testing the role and not a blanket denial. |
-| 4.13 | Same as 4.11, but with `EXECUTE` **deliberately granted** to `anon` first | The role guard **inside** `0010`, on its own | **`KY003`**. Local only (`live`); `STATIC` source check on the hosted path |
+| 4.13 | Same as 4.11, but with `EXECUTE` **deliberately granted** to `anon` first | The role guard **inside** the effective `apply_inventory_sync` (`0025`), on its own | **`KY003`**. Local only (`live`); `STATIC` source check on the hosted path |
 
 4.12 is not optional. Without it, a build that refuses everything for everyone would pass 4.1
 through 4.11 and be reported as secure.
@@ -353,8 +353,11 @@ in which the database sits fail-open. The guard is now deny-by-default within `0
 runs in a `finally`, and the target is an ephemeral database that `bootstrap()` drops and
 recreates on every run — `bootstrap()` refuses any host that is not loopback.
 
-On the hosted path 4.13 is `STATIC`: it greps `supabase/migrations/0010_fn_apply_inventory_sync.sql`
-for both `COALESCE` terms and for the absence of the old fail-open form. Granting `anon` `EXECUTE`
+On the hosted path 4.13 is `STATIC`: it resolves the **effective** `apply_inventory_sync`
+definition — the last one applied in migration order (0010, replaced by 0013, replaced by 0025),
+with line comments stripped (`verify/hosted/lib/migration-source.mjs`) — and checks it for both
+`COALESCE` terms and for the absence of the old fail-open form. Hosted 1.12 resolves the
+effective `v_inventory` definition the same way, so neither can pass against a superseded file. Granting `anon` `EXECUTE`
 on a live project to prove a guard is a real privilege change and is refused. That is a limit of
 the hosted path, printed as one, and never counted as a live pass.
 

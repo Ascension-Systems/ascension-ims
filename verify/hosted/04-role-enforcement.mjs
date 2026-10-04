@@ -26,10 +26,8 @@
  * value differs, and it differs in the safe direction.
  */
 
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { Report } from '../lib/report.mjs'
-import { REPO } from './lib/config.mjs'
+import { latestFunctionDefinition } from './lib/migration-source.mjs'
 import {
   selectRows,
   insertRows,
@@ -354,25 +352,22 @@ export default async function attack4(ctx) {
   )
 
   /* ---------------------------------------------------------------- *
-   * 4.13 — the role guard is fail-closed WITHIN 0010, independently of
-   *        the 0012 grant. STATIC on this path, and deliberately so.
+   * 4.13 — the role guard is fail-closed within the EFFECTIVE definition,
+   *        independently of the 0012 grant. STATIC on this path, and
+   *        deliberately so. The body checked is the LAST definition applied
+   *        (0010, replaced by 0013, replaced by 0025), resolved in migration
+   *        order with line comments stripped — never a fixed file.
    * ---------------------------------------------------------------- */
-  const syncSqlRaw = readFileSync(
-    join(REPO, 'supabase', 'migrations', '0010_fn_apply_inventory_sync.sql'),
-    'utf8',
-  )
-  // Match against CODE, not comments. 0010 documents the old fail-open form in a comment to
-  // explain why it was replaced; a raw substring match on the file trips on that comment and
-  // fails an assertion whose subject (the actual guard) is correct. Strip line comments first.
-  const syncSql = syncSqlRaw.replace(/--[^\n]*/g, '')
+  const syncDef = latestFunctionDefinition('apply_inventory_sync')
+  const syncSql = syncDef?.text ?? ''
   const hasAdminTerm = syncSql.includes('COALESCE(public.is_admin(), false)')
   const hasServiceRoleTerm = syncSql.includes("COALESCE(auth.role(), '') = 'service_role'")
   const hasOldFailOpenForm = syncSql.includes('auth.uid() IS NOT NULL AND NOT')
   report.staticCheck(
     '4.13',
-    'the role guard in 0010 is fail-closed within its own file (deny by default; admin or service_role only)',
-    hasAdminTerm && hasServiceRoleTerm && !hasOldFailOpenForm,
-    'STATIC — asserts the MIGRATION SOURCE of supabase/migrations/0010_fn_apply_inventory_sync.sql, ' +
+    `the effective apply_inventory_sync role guard (${syncDef?.file ?? 'NOT FOUND'}) is fail-closed within its own body (deny by default; admin or service_role only)`,
+    Boolean(syncDef) && hasAdminTerm && hasServiceRoleTerm && !hasOldFailOpenForm,
+    `STATIC — asserts the MIGRATION SOURCE of supabase/migrations/${syncDef?.file ?? '(not found)'}, ` +
       'not deployed state. The live form of this assertion GRANTs anon EXECUTE and asserts KY003 ' +
       'anyway; that is a real privilege change on a live project and is refused here, so it runs ' +
       'only under `npm run verify:local`, against an ephemeral database that is dropped and ' +

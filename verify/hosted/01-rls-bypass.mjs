@@ -28,10 +28,8 @@
  * under `npm run verify:local`.
  */
 
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { Report } from '../lib/report.mjs'
-import { REPO } from './lib/config.mjs'
+import { latestViewDefinition } from './lib/migration-source.mjs'
 import { selectRows, insertRows, updateRows, deleteRows } from './lib/client.mjs'
 import {
   KYV_LOCATION,
@@ -254,14 +252,14 @@ export default async function attack1(ctx) {
    * the migration source and LABELLED AS SUCH. No live proxy for it exists
    * over this channel and none is invented.
    * ---------------------------------------------------------------- */
-  const viewSql = readFileSync(join(REPO, 'supabase', 'migrations', '0008_inventory_view.sql'), 'utf8')
-  const createIdx = viewSql.indexOf('CREATE VIEW public.v_inventory')
-  const asIdx = viewSql.indexOf('\nAS\n', createIdx)
-  const viewHeader = createIdx >= 0 && asIdx > createIdx ? viewSql.slice(createIdx, asIdx) : ''
+  // The LATEST definition applied (0025 drops and recreates the view), not a fixed file.
+  const view = latestViewDefinition()
+  const asAt = view ? view.text.search(/\bAS\s+SELECT\b/i) : -1
+  const viewHeader = view && asAt > 0 ? view.text.slice(0, asAt) : ''
   report.staticCheck(
     '1.12',
-    'v_inventory carries security_invoker (a default view is a full RLS bypass)',
-    /WITH\s*\(\s*security_invoker\s*=\s*(on|true)\s*\)/i.test(viewHeader),
+    `v_inventory carries security_invoker (a default view is a full RLS bypass) — effective definition: ${view?.file ?? 'NOT FOUND'}`,
+    Boolean(view) && /WITH\s*\(\s*security_invoker\s*=\s*(on|true)\s*\)/i.test(viewHeader),
     'STATIC — asserts the migration source, not the deployed view. pg_class is not exposed ' +
       'over PostgREST. The live pg_class check runs only under `npm run verify:local`.',
     `the CREATE VIEW header in supabase/migrations/0008_inventory_view.sql does not carry security_invoker: ${JSON.stringify(viewHeader)}`,
