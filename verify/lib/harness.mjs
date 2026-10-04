@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import pg from 'pg'
+import { parse as parseConnectionString } from 'pg-connection-string'
 import { Report } from './report.mjs'
 
 // Re-exported so the four attack files keep importing Report from here, unchanged.
@@ -71,17 +72,52 @@ let embeddedDir = null
  */
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]', '0:0:0:0:0:0:0:1'])
 
+const isLoopbackHost = (host) => {
+  if (typeof host !== 'string' || host.length === 0) return false
+  const bare = host.replace(/^\[|\]$/g, '')
+  return LOOPBACK_HOSTS.has(host) || LOOPBACK_HOSTS.has(bare) || /^127\.\d+\.\d+\.\d+$/.test(bare)
+}
+
+/**
+ * Judged on what `pg` will ACTUALLY connect to, not on the URL's authority. pg parses the
+ * string with pg-connection-string, where a `?host=` query parameter overrides the hostname:
+ * `postgresql://u:p@localhost/db?host=remote` connects to `remote`. Checking
+ * `new URL(...).hostname` alone was therefore bypassable. So: postgres schemes only, no
+ * host-redirecting query parameters at all, and the effective parsed host must be loopback.
+ * bootstrap() additionally confirms the live server address before issuing destructive SQL.
+ */
 export function isLoopbackDbUrl(dbUrl) {
   if (typeof dbUrl !== 'string' || dbUrl.length === 0) return false
-  let host
+  let url
   try {
-    host = new URL(dbUrl).hostname
+    url = new URL(dbUrl)
   } catch {
     return false
   }
-  if (!host) return false
-  const bare = host.replace(/^\[|\]$/g, '')
-  return LOOPBACK_HOSTS.has(host) || LOOPBACK_HOSTS.has(bare) || /^127\.\d+\.\d+\.\d+$/.test(bare)
+  if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') return false
+  for (const key of url.searchParams.keys()) {
+    if (['host', 'hostaddr', 'socket', 'service'].includes(key.toLowerCase())) return false
+  }
+  if (!isLoopbackHost(url.hostname)) return false
+  let parsed
+  try {
+    parsed = parseConnectionString(dbUrl)
+  } catch {
+    return false
+  }
+  return isLoopbackHost(parsed.host)
+}
+
+/** inet_server_addr() of the live connection: loopback TCP only (NULL = unix socket, refused). */
+async function assertConnectedToLoopback(client) {
+  const { rows } = await client.query('SELECT host(inet_server_addr()) AS addr')
+  const addr = rows[0]?.addr ?? null
+  if (!isLoopbackHost(addr)) {
+    throw new Error(
+      `REFUSING TO BOOTSTRAP: the live connection's server address is ${addr ?? 'NULL (unix socket)'}, ` +
+        'not a loopback TCP address. Nothing was dropped.',
+    )
+  }
 }
 
 /**
@@ -175,8 +211,16 @@ const readSql = (p) => readFileSync(p, 'utf8')
  * shim's cron.schedule/unschedule stubs take its place. Every rewrite is listed here and
  * printed in the run header (LOCAL_REWRITE_NOTE) — never applied silently.
  */
+// Each rewrite is pinned to ONE file and must match a WHOLE LINE exactly once. The line is
+// replaced by a comment of its own, so nothing else on any line can be swallowed, and a match
+// inside a literal or function body is impossible (it would not be a whole line). If the
+// expected line moves or multiplies, the harness throws rather than guessing.
 const LOCAL_REWRITES = [
-  { pattern: /CREATE EXTENSION IF NOT EXISTS pg_cron\s*;/gi, replacement: '-- [verify:local] pg_cron removed; shim stubs cron.*' },
+  {
+    file: '0018_simulated_live_feed.sql',
+    line: /^CREATE EXTENSION IF NOT EXISTS pg_cron;[ \t\r]*$/m,
+    replacement: '-- [verify:local] CREATE EXTENSION pg_cron removed; shim stubs cron.*',
+  },
 ]
 
 export const LOCAL_REWRITE_NOTE =
@@ -185,7 +229,16 @@ export const LOCAL_REWRITE_NOTE =
 
 function readMigration(p) {
   let sql = readSql(p)
-  for (const { pattern, replacement } of LOCAL_REWRITES) sql = sql.replace(pattern, replacement)
+  const name = p.split(/[\\/]/).pop()
+  for (const { file, line, replacement } of LOCAL_REWRITES) {
+    if (file !== name) continue
+    const all = new RegExp(line.source, 'gm')
+    const count = (sql.match(all) ?? []).length
+    if (count !== 1) {
+      throw new Error(`local rewrite for ${file} expected exactly 1 matching line, found ${count}`)
+    }
+    sql = sql.replace(line, replacement)
+  }
   return sql
 }
 
@@ -224,6 +277,8 @@ export async function bootstrap(db, client) {
         'the hosted path; it never loads this module.',
     )
   }
+
+  await assertConnectedToLoopback(client)
 
   await client.query('DROP SCHEMA IF EXISTS public CASCADE')
   await client.query('DROP SCHEMA IF EXISTS auth CASCADE')
