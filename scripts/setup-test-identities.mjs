@@ -12,20 +12,18 @@
  * sends mail.
  *
  * ------------------------------------------------------------------------------------
- * IT REFUSES TO RUN IF THAT WOULD BIND THE DEMO DELTA TO A TEST ARTEFACT
+ * IT REFUSES TO RUN IF THE TEST ADMIN COULD TAKE SEA-9003'S ATTRIBUTION
  * ------------------------------------------------------------------------------------
- * `supabase/seed/0003_seed_demo_delta.sql` binds to the EARLIEST rep profile by created_at,
- * and no-ops entirely if ANY commitment row exists anywhere — its guard is
- * `IF EXISTS (SELECT 1 FROM public.commitments)`, not scoped by sku or location. So the
- * first commitment this harness writes, even at location 'kyv-verify' on a KYV- sku, would
- * suppress 0003 permanently.
+ * `supabase/seed/0003_seed_demo_delta.sql` credits SEA-9003's seeded manual override to the
+ * EARLIEST admin profile by created_at. (Since 0025 it no longer creates a demo commitment.)
+ * If the verification admin existed first it would be credited, and removing it afterwards
+ * would leave the override unattributed (profiles ON DELETE SET NULL).
  *
- * The refusal is driven by a THREE-WAY POSITIVE PROBE for the demo delta row, not by a bare
- * commitment count: a count alone waves through the worse state where unrelated commitments
- * exist but 0003 never ran. See verify/hosted/lib/identity.mjs.
+ * The refusal is a POSITIVE probe: SEA-9003 must already carry an override_by that is not a
+ * verification identity. See verify/hosted/lib/identity.mjs.
  *
  * The canonical order is:
- *   provision and sign in the real rep -> paste supabase/seed/0003_seed_demo_delta.sql ->
+ *   provision and sign in the real admin -> paste supabase/seed/0003_seed_demo_delta.sql ->
  *   only then create test identities and run the harness.
  */
 
@@ -33,7 +31,7 @@ import { loadConfig, configProofLines, NO_CONFIG, missingConfigDetail } from '..
 import { buildIdentities } from '../verify/hosted/lib/client.mjs'
 import {
   provisionIdentities,
-  demoDeltaVerdict,
+  attributionVerdict,
   verdictMessage,
   VERDICT,
   REP_EMAIL,
@@ -79,7 +77,7 @@ async function main() {
 
   // Belt and braces: runPreflight already checked this, but this script must never create an
   // identity on the strength of a check made somewhere else.
-  const verdict = await demoDeltaVerdict(cfg, identities)
+  const verdict = await attributionVerdict(cfg, identities)
   if (verdict.verdict !== VERDICT.PROCEED) {
     write(`${verdictMessage(verdict)}\n\nNothing was created.\n`)
     process.exitCode = 1

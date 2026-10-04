@@ -201,7 +201,6 @@ export function InventoryList({
               <InventoryRow
                 key={key}
                 row={row}
-                authority={settings.inventory_authority}
                 stale={staleness.get(key) ?? false}
                 serverNow={serverNow}
                 expanded={expanded.has(key)}

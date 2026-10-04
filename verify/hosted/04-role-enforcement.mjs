@@ -137,7 +137,7 @@ export default async function attack4(ctx) {
   /* ---------------------------------------------------------------- *
    * 4.5 — read sync history. RLS sync_runs_select_admin.
    * ---------------------------------------------------------------- */
-  await applySync(cfg, identities.admin, { rows: [], matches: [] })
+  await applySync(cfg, identities.admin, { rows: [] })
 
   const r45 = await selectRows(cfg, identities.rep, 'inventory_sync_runs', 'select=id')
   const r45control = await selectRows(cfg, identities.admin, 'inventory_sync_runs', 'select=id')
@@ -344,7 +344,7 @@ export default async function attack4(ctx) {
   }
 
   const c3 = await rpc(cfg, identities.admin, 'apply_inventory_sync', {
-    p_payload: { rows: [], matches: [] },
+    p_payload: { rows: [] },
   })
   report.check(
     '4.12c',

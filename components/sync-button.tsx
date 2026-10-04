@@ -7,10 +7,8 @@ import styles from './sync-button.module.css'
 /**
  * Runs a source sync on demand (POST /api/sync, admin-only, guarded twice).
  *
- * MANUAL BY DESIGN. There is no scheduled job anywhere in this build: an unattended job is
- * the most likely place a time-based retirement would later creep in, and time-based
- * retirement is the oversell bug. A person presses this, and the sync retires a commitment
- * only where the source demonstrably matches it.
+ * Applies the inventory source's rows (on hand, committed = open sales orders, incoming).
+ * Manual overrides keep their corrected on-hand; their committed still follows the source.
  */
 export function SyncButton() {
   const router = useRouter()
@@ -25,15 +23,11 @@ export function SyncButton() {
       const res = await fetch('/api/sync', { method: 'POST' })
       const body = await res.json().catch(() => null)
       if (res.ok) {
-        // Read the field /api/sync actually returns. The previous keys did not exist on the
-        // response, so this always read 0 -- correct today only by coincidence, and a
-        // landmine for whoever wires real matching.
-        const confirmed = body?.run?.commitments_confirmed ?? 0
         const applied = body?.run?.rows_applied ?? null
+        const overrides = body?.run?.overrides_preserved ?? 0
         setMsg(
-          confirmed > 0
-            ? `Sync complete. ${confirmed} commitment${confirmed === 1 ? '' : 's'} confirmed by the source.`
-            : `Sync complete.${applied !== null ? ` ${applied} row${applied === 1 ? '' : 's'} applied.` : ''} The source did not include any pending commitment, so none were retired.`,
+          `Sync complete.${applied !== null ? ` ${applied} row${applied === 1 ? '' : 's'} applied.` : ''}` +
+            (overrides > 0 ? ` ${overrides} manual override${overrides === 1 ? '' : 's'} kept.` : ''),
         )
         router.refresh()
       } else {

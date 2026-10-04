@@ -2,11 +2,7 @@
 
 export type AppRole = 'rep' | 'admin'
 
-export type CommitmentState = 'pending' | 'confirmed_in_source' | 'retired'
-
 export type InventorySourceName = 'quickbooks' | 'quickbooks_stub' | 'manual_override'
-
-export type InventoryAuthority = 'quickbooks' | 'portal'
 
 export type Profile = {
   id: string
@@ -16,7 +12,6 @@ export type Profile = {
 }
 
 export type AppSettings = {
-  inventory_authority: InventoryAuthority
   low_stock_default: number
   stale_after_minutes: number
 }
@@ -30,18 +25,12 @@ export type InventoryViewRow = {
   low_stock_threshold: number
   location: string
   qty_on_hand: number
-  /** Committed per the source (QuickBooks). */
-  qty_committed_source: number
-  /** Sum of `pending` portal commitments. The advisory delta. */
-  qty_committed_portal: number
-  qty_committed_total: number
-  /** on_hand - committed_source. Primary figure in `quickbooks` mode. */
-  qty_available_source: number
+  /** Committed per QuickBooks: quantity on open sales orders. The only source (0025). */
+  qty_committed: number
   /**
-   * on_hand - committed_source - committed_portal. Primary figure in `portal` mode, and
-   * ALWAYS the figure the status badge is computed from. Never clamped at zero: a negative
-   * value means the source dropped on-hand below what is already spoken for, which is
-   * exactly the condition a rep needs to see.
+   * on_hand - committed. The figure a rep acts on, and the one the status badge is computed
+   * from. Never clamped at zero: a negative value means QuickBooks has more on open sales
+   * orders than on hand, which is exactly the condition a rep needs to see.
    */
   qty_available: number
   qty_incoming: number

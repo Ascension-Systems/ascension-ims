@@ -33,8 +33,14 @@ Determines whether `available` can be derived from QuickBooks at all, and how wr
 currently is. This is the single biggest unknown in the integration estimate; **do not quote a
 fixed price for the QuickBooks work before this is answered.**
 
-*Currently assumed:* the source baseline is stale and incomplete, and the portal's delta
-ledger compensates. The schema stores components separately so a wrong guess is cheap.
+**DECIDED (3 Oct 2026):** committed is taken from QuickBooks — the quantity on open sales
+orders — and nothing else. Reps no longer record commitments in the portal; the portal's delta
+ledger was removed in migration 0025. Available = on hand − committed in QuickBooks.
+
+*Consequence the client must accept:* stock promised before a sales order exists in QuickBooks
+is not shown as committed, so another rep can see it as available. The client must enter sales
+orders promptly. The schema still stores the components separately, so the figures can be
+re-derived if this changes.
 
 ### 🔴 4. Multi-location inventory?
 If they run Enterprise with Advanced Inventory across warehouses, quantity is per-site and both
@@ -48,7 +54,7 @@ exists from day one, so adding real sites is data plus UI, not a migration.
 ## Needed before real users
 
 ### 🟡 5. Who is the operational admin, and who offboards a rep?
-Someone must own the reconciliation queue, corrections, and removing a rep who leaves. Right
+Someone must own inventory corrections, running the sync, and removing a rep who leaves. Right
 now there is exactly one admin account (yours). A rep who leaves keeps a valid session for
 ~400 days unless someone deletes them.
 
@@ -79,7 +85,7 @@ Ascension's identity, we need assets — we will not invent them.
 ### 🟡 11. Does the honest recommendation include SharePoint?
 The client already pays for Office 365, and the consultation flagged a preference for using it.
 The document-library half of the original brief may genuinely belong in SharePoint, with this
-app owning inventory and commitments. Saying so builds trust and narrows scope to what we do
+app owning the inventory view and corrections (committed stock comes from QuickBooks). Saying so builds trust and narrows scope to what we do
 best.
 
 ### 🟢 12. Do they need work-order numbers, labour time, costs, or purchase approvals?
@@ -89,15 +95,16 @@ best.
 
 ## Smaller confirmations
 
-- **13.** 🟢 Should every rep see all commitments, or only their own? *Assumed: own only; admins
-  see everything. Enforced in the database, not the UI.*
+- **13.** ~~🟢 Should every rep see all commitments, or only their own?~~ *Obsolete (3 Oct 2026):
+  reps no longer record commitments in the portal (item 3). The historical `commitments` rows
+  remain visible own-only to reps and in full to admins, enforced in the database.*
 - **14.** 🟢 What counts as "stale" inventory? *Assumed: 6 hours. One settings row to change.*
 - **15.** 🟢 Low-stock threshold? *Assumed: 5 units, per-product overridable.*
 - **16.** 🟡 What does "automate reaching out" mean concretely — notify staff, auto-assign, or
   email a vendor? *Assumed: prepare and suggest, human confirms. Nothing sends by itself.*
 - **17.** 🟡 Data retention — is maintenance/commitment history kept indefinitely? *Assumed:
-  retained, never auto-deleted. The ledger is the audit trail.*
+  retained, never auto-deleted. The pre-0025 commitment ledger is kept read-only as history.*
 
 ---
 
-*Last updated 2026-08-20. Add to this rather than starting a new list.*
+*Last updated 2026-10-03. Add to this rather than starting a new list.*

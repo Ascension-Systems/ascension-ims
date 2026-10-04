@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import styles from './commit-form.module.css'
+import styles from './stock-form.module.css'
 import own from './admin-override-form.module.css'
 
 /**
@@ -19,9 +19,8 @@ import own from './admin-override-form.module.css'
  * rather than as a 500 later. An unexplained hand-edit to a number reps quote customers from
  * is precisely the silent override the show-both-numbers design exists to prevent.
  *
- * Committed-in-source is deliberately NOT editable here: that is the source's figure, and
- * portal commitments are layered over it in their own ledger. Merging the two in one form
- * would blur the delta the product rests on.
+ * Committed is deliberately NOT editable here: it is QuickBooks' figure (open sales orders),
+ * the only source of committed since 0025, and the database refuses the column (0013, 0025).
  */
 export function AdminOverrideForm({
   sku,

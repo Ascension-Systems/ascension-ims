@@ -1,47 +1,33 @@
 -- --------------------------------------------------------------------------
 -- 0003_seed_demo_delta.sql -- HAND-WRITTEN, not generated.
 --
--- Apply LAST, and only AFTER at least one user has signed in.
+-- Apply LAST, and only AFTER the real admin has signed in.
 --
--- Commitments reference profiles(id), which does not exist until the Human creates users in
--- the Supabase dashboard. This file degrades gracefully if applied too early: it raises a
--- NOTICE and does nothing, so it is safe to paste at any point and re-paste later.
+-- Since 0025 the portal records no commitments, so this file no longer creates the "demo
+-- delta" (a rep commitment on SEA-9007 that QuickBooks had not seen). The filename is kept so
+-- existing run instructions still point at it. What remains is attribution: SEA-9003's seeded
+-- manual override is credited to the earliest admin profile.
 --
--- It is deliberately NOT listed in supabase/config.toml's seed paths: the verification
--- harness needs SEA-9007 to start from a known 40/10 baseline with no pre-existing
--- commitment, and this file would move that baseline.
+-- Degrades gracefully if applied too early: with no admin profile it raises a NOTICE and does
+-- nothing, so it is safe to paste at any point and re-paste later.
 --
--- What it produces is the brief's own worked example on SEA-9007:
---   40 on hand - 10 committed in QuickBooks
---   6 more committed by reps, not yet in QuickBooks -> 24 available
--- which makes the show-both-numbers presentation demoable without any step-2 UI.
+-- It is deliberately NOT listed in supabase/config.toml's seed paths. Run order still matters
+-- for one reason: the earliest admin is the one credited, so a verification test admin
+-- created first would be credited instead (and SEA-9003 would lose attribution when the test
+-- admin is removed — profiles ON DELETE SET NULL). `npm run verify:identities` refuses to run
+-- until SEA-9003 is attributed.
 --
 -- Contains no credentials of any kind.
 -- --------------------------------------------------------------------------
 
 DO $$
-DECLARE v_rep uuid; v_admin uuid;
+DECLARE v_admin uuid;
 BEGIN
-  SELECT id INTO v_rep   FROM public.profiles WHERE role = 'rep'   ORDER BY created_at LIMIT 1;
   SELECT id INTO v_admin FROM public.profiles WHERE role = 'admin' ORDER BY created_at LIMIT 1;
-
-  -- Backfill the override author on the SEA-9003 fixture. The seed file could not set it:
-  -- no admin profile existed at the time it was written.
-  IF v_admin IS NOT NULL THEN
-    UPDATE public.inventory SET override_by = v_admin
-     WHERE sku = 'SEA-9003' AND override_by IS NULL;
-  END IF;
-
-  IF v_rep IS NULL THEN
-    RAISE NOTICE 'No rep profile yet; skipping demo delta. Re-run after a rep signs in.';
+  IF v_admin IS NULL THEN
+    RAISE NOTICE 'No admin profile yet; skipping. Re-run after the admin signs in.';
     RETURN;
   END IF;
-
-  IF EXISTS (SELECT 1 FROM public.commitments) THEN
-    RAISE NOTICE 'Commitments already exist; skipping demo delta.';
-    RETURN;
-  END IF;
-
-  INSERT INTO public.commitments (sku, location, qty, rep_id, state, note)
-  VALUES ('SEA-9007', 'default', 6, v_rep, 'pending', 'Demo delta: recorded in portal, not yet in QuickBooks');
+  UPDATE public.inventory SET override_by = v_admin
+   WHERE sku = 'SEA-9003' AND override_by IS NULL;
 END $$;

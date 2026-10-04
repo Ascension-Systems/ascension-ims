@@ -1,13 +1,12 @@
 /**
  * Stock-status and staleness derivation. Pure, unit-testable, no ambient clock.
  *
- * THE STATUS BADGE IS COMPUTED FROM `qty_available` -- the most conservative figure -- IN
- * BOTH AUTHORITY MODES. Authority mode governs presentation emphasis, not safety. A status
- * reading "in stock" because QuickBooks had not caught up yet would reintroduce the exact
- * oversell bug this project exists to prevent. (Plan decision A5.)
+ * THE STATUS BADGE IS COMPUTED FROM `qty_available` -- on hand minus QuickBooks' committed
+ * (open sales orders), the figure a rep acts on. Since 0025 QuickBooks is the only source of
+ * committed; the portal records no commitments of its own.
  */
 
-import type { InventoryAuthority, InventorySourceName, InventoryViewRow } from '@/lib/types'
+import type { InventorySourceName, InventoryViewRow } from '@/lib/types'
 import { ageInMinutes } from '@/lib/relative-time'
 
 export type StockStatus = 'in-stock' | 'low' | 'none-incoming' | 'none'
@@ -121,16 +120,11 @@ export function sourceLabel(source: InventorySourceName): string {
 }
 
 /* ------------------------------------------------------------------------- *
- * Authority-mode presentation
+ * Availability presentation
  *
- * BOTH MODES READ THE SAME VIEW, COMPUTE THE SAME FIGURES, AND RENDER THE SAME COMPONENT.
- * The setting changes which figure is typographically primary and how the secondary line is
- * worded. It is a setting, not a fork: there is no branch in the data layer, no second query,
- * no alternate component. This function is the single place the mode is consulted, and it
- * returns DATA rather than markup so there is exactly one rendering path.
- *
- * NEITHER MODE HIDES A NUMBER. NEITHER MODE SILENTLY OVERRIDES. In both, both figures are on
- * screen; only the emphasis moves.
+ * One mode since 0025: the figure is QuickBooks' availability (on hand minus open sales
+ * orders) and the components line always shows both inputs, so nothing is hidden. Returns
+ * DATA rather than markup so there is exactly one rendering path.
  * ------------------------------------------------------------------------- */
 
 export type AvailabilityPresentation = {
@@ -140,52 +134,20 @@ export type AvailabilityPresentation = {
   primaryLabel: string
   /** The components breakdown, always shown. */
   componentsLine: string
-  /**
-   * The second figure, always shown, never hidden -- the other mode's primary. Null only
-   * when the two figures are identical (no portal delta), in which case there is no second
-   * number to show.
-   */
-  secondaryLine: string | null
-  /** The advisory delta line. Rendered only when there is a portal delta. */
-  advisoryLine: string | null
 }
 
 const units = (n: number, uom: string) => (uom && uom !== 'EA' ? `${n} ${uom}` : `${n}`)
 
-export function availabilityPresentation(
-  row: InventoryViewRow,
-  authority: InventoryAuthority,
-): AvailabilityPresentation {
-  const delta = row.qty_committed_portal
-  const hasDelta = delta > 0
-
+export function availabilityPresentation(row: InventoryViewRow): AvailabilityPresentation {
   // Incoming is one of the five centrepiece figures the brief names, and it is most needed on
   // exactly the item the fixtures stress: available at zero with stock on the way. It rides on
   // the always-shown components line so it is visible on the COLLAPSED card, not only once the
   // row is expanded. Shown only when there is genuinely incoming stock.
   const incoming = row.qty_incoming > 0 ? ` · ${units(row.qty_incoming, row.uom)} incoming` : ''
 
-  if (authority === 'quickbooks') {
-    return {
-      primaryValue: row.qty_available_source,
-      primaryLabel: 'AVAILABLE (QUICKBOOKS)',
-      componentsLine: `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks${incoming}`,
-      secondaryLine: hasDelta ? `Counting rep commitments: ${row.qty_available} available` : null,
-      advisoryLine: hasDelta
-        ? `${delta} more committed by reps, not yet in QuickBooks → ${row.qty_available} available`
-        : null,
-    }
-  }
-
   return {
     primaryValue: row.qty_available,
-    primaryLabel: 'AVAILABLE',
-    componentsLine: hasDelta
-      ? `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_total} committed (${row.qty_committed_source} QuickBooks + ${delta} rep)${incoming}`
-      : `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed_source} committed in QuickBooks${incoming}`,
-    secondaryLine: hasDelta
-      ? `QuickBooks alone shows ${row.qty_available_source} available`
-      : null,
-    advisoryLine: null,
+    primaryLabel: 'AVAILABLE (QUICKBOOKS)',
+    componentsLine: `${units(row.qty_on_hand, row.uom)} on hand · ${row.qty_committed} committed in QuickBooks${incoming}`,
   }
 }

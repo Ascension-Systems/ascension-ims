@@ -3,7 +3,6 @@ import 'server-only'
 import { createPrivateKey, sign } from 'node:crypto'
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { CommitmentState } from '@/lib/types'
 
 /**
  * Direct APNs push — no Firebase, no third-party sender. The whole pipeline is:
@@ -12,7 +11,7 @@ import type { CommitmentState } from '@/lib/types'
  * one request per device to Apple. ~120 users at most, chunked; no queue needed at this scale.
  *
  * FAIL-SILENT BY DESIGN. Notifications are a courtesy layered on top of actions that must
- * succeed on their own: a commitment is not less recorded because a push failed. Every public
+ * succeed on their own: a correction is not less applied because a push failed. Every public
  * helper catches everything and logs; nothing here can ever fail a request. When the APNS_*
  * env vars are unset (local dev, or before the key is configured) every helper is a no-op.
  *
@@ -325,31 +324,6 @@ export async function notifyEveryone(note: PushNote, excludeUserId?: string): Pr
     await pushToUserIds(ids, note)
   } catch (e) {
     console.error('[push] notifyEveryone failed:', e)
-  }
-}
-
-/** Reps with a live (pending/confirmed) commitment on this sku — the people a change affects. */
-export async function notifyRepsCommittedTo(sku: string, note: PushNote, excludeUserId?: string): Promise<void> {
-  try {
-    if (!pushConfigured()) return
-    const admin = createAdminClient()
-    // 'confirmed_in_source' is the real enum label (migration 0001) — NOT 'confirmed'. An
-    // invalid token poisons the whole IN list (22P02), so getting this wrong silently notifies
-    // nobody. Errors are logged, never swallowed, so a poisoned query can't hide again.
-    const LIVE_STATES: CommitmentState[] = ['pending', 'confirmed_in_source']
-    const { data, error } = await admin
-      .from('commitments')
-      .select('rep_id')
-      .eq('sku', sku)
-      .in('state', LIVE_STATES)
-    if (error) {
-      console.error('[push] notifyRepsCommittedTo query failed:', error.code, error.message)
-      return
-    }
-    const ids = [...new Set((data ?? []).map((c) => c.rep_id))].filter((id) => id !== excludeUserId)
-    await pushToUserIds(ids, note)
-  } catch (e) {
-    console.error('[push] notifyRepsCommittedTo failed:', e)
   }
 }
 

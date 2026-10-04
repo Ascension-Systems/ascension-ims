@@ -57,9 +57,7 @@ export default async function InventoryPage() {
       <div className={styles.intro}>
         <h1 className={styles.title}>Inventory</h1>
         <p className={styles.subtitle}>
-          {settings.inventory_authority === 'quickbooks'
-            ? 'Availability per QuickBooks, with rep commitments shown separately.'
-            : 'Availability including rep commitments not yet in QuickBooks.'}
+          Available = on hand minus quantity on open sales orders in QuickBooks.
         </p>
       </div>
 

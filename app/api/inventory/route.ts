@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
 import { mapPostgresError } from '@/lib/errors'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { notifyEveryone, notifyRepsCommittedTo, checkLowStock } from '@/lib/push'
+import { notifyEveryone, checkLowStock } from '@/lib/push'
 
 /**
  * PATCH -> an ADMIN OVERRIDE of an inventory row. Build-order step 3.
@@ -27,9 +27,8 @@ import { notifyEveryone, notifyRepsCommittedTo, checkLowStock } from '@/lib/push
  * the row unchanged, with an admin control proving the same statement succeeds. Hiding the
  * form is not access control and neither is this handler.
  *
- * qty_committed IS NOT WRITABLE HERE. It is the source's figure; portal commitments live in
- * their own ledger and are layered over it. Letting an admin edit committed-in-source through
- * the same form would blur the two and break the delta the whole product rests on.
+ * qty_committed IS NOT WRITABLE HERE. It is QuickBooks' figure (open sales orders) and the
+ * only source of committed since 0025; the database refuses the column for INSERT and UPDATE.
  */
 export async function PATCH(request: Request) {
   const admin = await requireAdmin()
@@ -164,19 +163,13 @@ export async function PATCH(request: Request) {
   // Notifications, all fail-silent, all via after() so a broadcast fan-out (back-in-stock can
   // reach every rep) runs AFTER the 200 and never delays or times out the admin's correction:
   //   * back in stock (0 -> >0): every rep hears — that's sellable news for the whole floor.
-  //   * any other correction: only the reps holding live commitments on this sku, whose
-  //     quoted numbers just changed under them.
+  //   * any other correction: no targeted push. (Until 0025 this went to reps holding portal
+  //     commitments on the sku; the portal no longer records commitments.)
   //   * low-stock check: the correction may itself have dropped the line under the threshold.
   after(async () => {
     if (prior && prior.qty_on_hand === 0 && qty_on_hand > 0) {
       await notifyEveryone(
         { title: 'Back in stock', body: `${sku}: ${qty_on_hand} on hand.`, url: '/inventory' },
-        admin.profile.id,
-      )
-    } else {
-      await notifyRepsCommittedTo(
-        sku,
-        { title: 'Inventory corrected', body: `${sku} on hand is now ${qty_on_hand}: ${note.trim()}`, url: '/inventory' },
         admin.profile.id,
       )
     }

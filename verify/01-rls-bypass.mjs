@@ -31,7 +31,7 @@ import {
   Report,
   ownerClient,
   bootstrap,
-  recordCommitmentAs,
+  seedHistoricalCommitment,
   applySyncAs,
   repAttempt,
   adminAttempt,
@@ -54,21 +54,16 @@ export default async function attack1(db) {
     await bootstrap(db, client)
 
     /* ---------------------------------------------------------------- *
-     * Setup: one commitment owned by the rep, one owned by the admin,
-     * both created through record_commitment() under their own identity.
-     * SEA-9002 has availability 14, so both fit.
+     * Setup: one historical commitment owned by the rep, one by the admin.
+     * Seeded by the owner — since 0025 there is no client write path to
+     * `commitments` at all; the table is read-only history.
      * ---------------------------------------------------------------- */
-    const repCommit = await recordCommitmentAs(client, REP_UID, 'SEA-9002', 3, 'rep commitment')
-    const adminCommit = await recordCommitmentAs(client, ADMIN_UID, 'SEA-9002', 2, 'admin commitment')
-
-    if (!repCommit.ok || !adminCommit.ok) {
-      report.fail('1.0', 'setup: two commitments recorded', `${repCommit.message ?? ''} ${adminCommit.message ?? ''}`)
-      return report
-    }
+    await seedHistoricalCommitment(client, REP_UID, 'SEA-9002', 3, 'rep commitment')
+    const adminCommit = { row: await seedHistoricalCommitment(client, ADMIN_UID, 'SEA-9002', 2, 'admin commitment') }
     const adminCommitmentId = adminCommit.row.id
 
     // A sync run, so 1.3 has a real row to be refused rather than an empty table.
-    await applySyncAs(client, ADMIN_UID, { rows: [], matches: [] })
+    await applySyncAs(client, ADMIN_UID, { rows: [] })
 
     /* ---------------------------------------------------------------- *
      * 1.1 — read every commitment
@@ -202,7 +197,7 @@ export default async function attack1(db) {
     )
 
     /* ---------------------------------------------------------------- *
-     * 1.8 — the one that would defeat attack 2 if it succeeded
+     * 1.8 — commitments is history: no client may write it
      * ---------------------------------------------------------------- */
     const directInsert = await repAttempt(
       client,
@@ -212,7 +207,7 @@ export default async function attack1(db) {
     )
     report.refused(
       '1.8',
-      'rep INSERT INTO commitments directly, bypassing the RPC, refused',
+      'rep INSERT INTO commitments directly refused (no write path exists since 0025)',
       directInsert,
       '42501',
     )

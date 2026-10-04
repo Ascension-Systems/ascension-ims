@@ -39,7 +39,7 @@ import {
   SKU,
   resetFixtures,
   rawInventoryRow,
-  recordCommitment,
+  seedHistoricalCommitment,
   applySync,
 } from './lib/fixtures.mjs'
 
@@ -58,17 +58,17 @@ export default async function attack1(ctx) {
   await resetFixtures(cfg, identities)
 
   /* ---------------------------------------------------------------- *
-   * Setup: one commitment owned by the rep, one owned by the admin,
-   * both created through record_commitment() under their own identity.
-   * KYV-0003 has availability 14, so both fit.
+   * Setup: one historical commitment owned by the rep, one by the admin.
+   * Seeded by service_role — since 0025 no client identity can write
+   * `commitments` at all; the table is read-only history.
    * ---------------------------------------------------------------- */
-  const repCommit = await recordCommitment(cfg, identities.rep, SKU.GEN, 3, 'rep commitment')
-  const adminCommit = await recordCommitment(cfg, identities.admin, SKU.GEN, 2, 'admin commitment')
+  const repCommit = await seedHistoricalCommitment(cfg, identities, uids.rep, SKU.GEN, 3, 'rep commitment')
+  const adminCommit = await seedHistoricalCommitment(cfg, identities, uids.admin, SKU.GEN, 2, 'admin commitment')
 
   if (!repCommit.ok || !adminCommit.ok) {
     report.fail(
       '1.0',
-      'setup: two commitments recorded',
+      'setup: two historical commitments seeded',
       `rep: ${repCommit.code ?? 'ok'} ${repCommit.message ?? ''} / admin: ${adminCommit.code ?? 'ok'} ${adminCommit.message ?? ''}`,
     )
     return report
@@ -76,7 +76,7 @@ export default async function attack1(ctx) {
   const adminCommitmentId = adminCommit.rows[0]?.id
 
   // A sync run, so 1.3 has a real row to be refused rather than an empty table.
-  await applySync(cfg, identities.admin, { rows: [], matches: [] })
+  await applySync(cfg, identities.admin, { rows: [] })
 
   /* ---------------------------------------------------------------- *
    * 1.1 — read every commitment
@@ -211,7 +211,7 @@ export default async function attack1(ctx) {
   ])
   report.refused(
     '1.8',
-    'rep INSERT INTO commitments directly, bypassing the RPC, refused',
+    'rep INSERT INTO commitments directly refused (no write path exists since 0025)',
     directInsert,
     '42501',
   )

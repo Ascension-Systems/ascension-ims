@@ -13,7 +13,7 @@
  *   NOT EXECUTED — no Supabase configuration      (variables absent, or endpoint unreachable)
  *   NOT EXECUTED — schema not applied             (tables, view or functions missing)
  *   NOT EXECUTED — seed not applied               (schema present, catalogue absent)
- *   NOT EXECUTED — demo delta not applied, run order violated
+ *   NOT EXECUTED — SEA-9003 not attributed (seed 0003), run order violated
  *   NOT EXECUTED — test identities not provisioned (run npm run verify:identities)
  *
  * A missing table surfaces from PostgREST as HTTP 404 with `code: 'PGRST205'`. This file
@@ -29,7 +29,7 @@ import { buildIdentities, selectRows, countRows, authHealth, openApiRoot } from 
 import {
   serviceClient,
   findUserByEmail,
-  demoDeltaVerdict,
+  attributionVerdict,
   verdictMessage,
   VERDICT,
   REP_EMAIL,
@@ -41,7 +41,7 @@ export const VERDICTS = {
   NO_CONFIG,
   NO_SCHEMA: 'NOT EXECUTED — schema not applied',
   NO_SEED: 'NOT EXECUTED — seed not applied',
-  NO_DEMO_DELTA: 'NOT EXECUTED — demo delta not applied, run order violated',
+  NO_ATTRIBUTION: 'NOT EXECUTED — SEA-9003 not attributed (seed 0003), run order violated',
   NO_IDENTITIES: 'NOT EXECUTED — test identities not provisioned (run npm run verify:identities)',
 }
 
@@ -123,16 +123,24 @@ export async function runPreflight(cfg, { requireIdentities = true } = {}) {
 
   /* --- functions are exposed as RPCs -------------------------------- */
   const api = await openApiRoot(cfg, identities.service)
-  const wantedRpcs = [
-    ['/rpc/record_commitment', '0009_fn_record_commitment.sql'],
-    ['/rpc/apply_inventory_sync', '0010_fn_apply_inventory_sync.sql'],
-  ]
+  const wantedRpcs = [['/rpc/apply_inventory_sync', '0010_fn_apply_inventory_sync.sql']]
+  // Since 0025 record_commitment must NOT exist. Still exposed means 0025 is not applied, and
+  // every attack-2 assertion would be judging the wrong schema.
+  const removedRpcs = [['/rpc/record_commitment', '0025_quickbooks_sourced_commitments.sql']]
   if (api.ok) {
     const missingRpcs = wantedRpcs
       .filter(([path]) => !api.paths.includes(path))
       .map(([path, mig]) => `${path} (supabase/migrations/${mig})`)
     if (missingRpcs.length) {
       const detail = `not exposed: ${missingRpcs.join(', ')}`
+      lines.push(line('RPCs exposed by PostgREST', VERDICTS.NO_SCHEMA, detail))
+      return { verdict: VERDICTS.NO_SCHEMA, detail, lines }
+    }
+    const stillPresent = removedRpcs
+      .filter(([path]) => api.paths.includes(path))
+      .map(([path, mig]) => `${path} (apply supabase/migrations/${mig})`)
+    if (stillPresent.length) {
+      const detail = `still exposed, should have been removed: ${stillPresent.join(', ')}`
       lines.push(line('RPCs exposed by PostgREST', VERDICTS.NO_SCHEMA, detail))
       return { verdict: VERDICTS.NO_SCHEMA, detail, lines }
     }
@@ -168,14 +176,14 @@ export async function runPreflight(cfg, { requireIdentities = true } = {}) {
   }
   lines.push(line('seed 0001 + 0002 applied', 'ok', `${products.count} catalogue products`))
 
-  /* --- the demo delta, and the run-order interlock ------------------- */
-  const delta = await demoDeltaVerdict(cfg, identities)
-  if (delta.verdict !== VERDICT.PROCEED) {
-    const detail = verdictMessage(delta)
-    lines.push(line('demo delta (supabase/seed/0003) applied', VERDICTS.NO_DEMO_DELTA, detail))
-    return { verdict: VERDICTS.NO_DEMO_DELTA, detail, lines }
+  /* --- the run-order interlock: SEA-9003 attributed by seed 0003 ----- */
+  const attribution = await attributionVerdict(cfg, identities)
+  if (attribution.verdict !== VERDICT.PROCEED) {
+    const detail = verdictMessage(attribution)
+    lines.push(line('SEA-9003 attributed (supabase/seed/0003)', VERDICTS.NO_ATTRIBUTION, detail))
+    return { verdict: VERDICTS.NO_ATTRIBUTION, detail, lines }
   }
-  lines.push(line('demo delta (supabase/seed/0003) applied', 'ok'))
+  lines.push(line('SEA-9003 attributed (supabase/seed/0003)', 'ok'))
 
   if (!requireIdentities) {
     return { verdict: VERDICTS.OK, detail: null, lines }
@@ -228,7 +236,7 @@ async function main() {
 
   if (result.verdict === VERDICTS.OK) {
     process.stdout.write(
-      'PREFLIGHT OK — the hosted project has the schema, the seed, the demo delta and the test\n' +
+      'PREFLIGHT OK — the hosted project has the schema, the seed, the SEA-9003 attribution and the test\n' +
         'identities the harness needs. `npm run verify` can run.\n',
     )
     process.exitCode = 0

@@ -3,6 +3,15 @@
 Companion to `PLAN.md`. Migrations `0001`–`0008`: types, tables, constraints, indexes, and
 the inventory view. Functions, RLS policies and grants are in `FUNCTIONS-AND-POLICIES.md`.
 
+> **Current state since `0025_quickbooks_sourced_commitments.sql` (3 Oct 2026).** "Committed"
+> is QuickBooks Desktop's quantity on open sales orders, delivered by the inventory adapter
+> (`lib/inventory-source.ts`) through `apply_inventory_sync()` into `inventory.qty_committed`.
+> The portal records no commitments of its own. `v_inventory` exposes `qty_committed` and
+> `qty_available` (= on hand − committed, unclamped) straight from the source row;
+> `pending_commitment_totals()` is dropped; `commitments` is retained as read-only history;
+> `app_settings.inventory_authority` is pinned to `'quickbooks'` and no longer read. The
+> sections below describe each object as it stands now and say where `0025` changed it.
+
 **Migrations are WRITTEN, NEVER APPLIED.** Builder writes these files into
 `supabase/migrations/` and stops. Nothing in this build connects to the hosted Supabase
 project (`rakslwwxduovcqnuercz`). The Human pastes each file, in numeric order, into the SQL
@@ -26,9 +35,9 @@ editor so a person reads every schema change.
    between migration 000n and 0011.
 6. **`FORCE ROW LEVEL SECURITY` is NOT used, deliberately.** The `SECURITY DEFINER`
    functions run as `postgres`, which also owns the tables; a table owner bypasses RLS
-   unless FORCE is set. That bypass is exactly what lets `record_commitment` insert a row
-   that no client-facing policy permits. Setting FORCE would break the concurrency-controlled
-   write path. Do not add it.
+   unless FORCE is set. That bypass is what lets `apply_inventory_sync` (and, before `0025`,
+   `record_commitment`) write rows such as the `inventory_sync_runs` audit record, which no
+   client-facing policy permits. Setting FORCE would break those write paths. Do not add it.
 
 ### Custom SQLSTATE codes used throughout
 
@@ -37,12 +46,15 @@ are branched on by name in `lib/errors.ts`, never by message text.
 
 | Code | Meaning | HTTP |
 |---|---|---|
-| `KY001` | INSUFFICIENT_AVAILABILITY — lost the race, or asked for more than exists | 409 |
+| `KY001` | INSUFFICIENT_AVAILABILITY — raised only by `record_commitment`, dropped in `0025`; no longer mapped | — |
 | `KY002` | NOT_AUTHENTICATED | 401 |
 | `KY003` | FORBIDDEN_ROLE — admin required | 403 |
 | `KY004` | INVALID_INPUT | 400 |
 | `KY005` | UNKNOWN_SKU_LOCATION | 404 |
 | `KY006` | ILLEGAL_COMMITMENT_TRANSITION | 409 |
+| `KY016` | COMMITMENT_MATCHING_REMOVED — `apply_inventory_sync` called with a non-empty `matches` array (`0025`) | 409 |
+
+`KY010`–`KY015` (enrollment) are raised by the `0014`/`0016` enrollment functions.
 
 ---
 
@@ -58,6 +70,10 @@ CREATE TYPE public.commitment_state    AS ENUM ('pending', 'confirmed_in_source'
 CREATE TYPE public.inventory_source    AS ENUM ('quickbooks', 'quickbooks_stub', 'manual_override');
 CREATE TYPE public.inventory_authority AS ENUM ('quickbooks', 'portal');
 ```
+
+`commitment_state` now types historical rows only, and `inventory_authority` has a single
+value in use (`'quickbooks'`, pinned by `0025`). Both types are kept; dropping them would buy
+nothing and touch history.
 
 `quickbooks` and `quickbooks_stub` are distinct values on purpose: the stub must never claim
 to be the real integration. The UI labels them "QuickBooks" and "QuickBooks (stub)". When
@@ -229,8 +245,8 @@ CREATE TABLE public.inventory (
   override_at    timestamptz,
   updated_at     timestamptz NOT NULL DEFAULT now(),
 
-  -- available FROM THE SOURCE ONLY. The portal delta is applied in the view (§8), never
-  -- stored here, because it is a live aggregate over the commitments ledger.
+  -- available FROM THE SOURCE. Since 0025 this is the only available figure: v_inventory
+  -- exposes it as qty_available (§8).
   qty_available_source integer
     GENERATED ALWAYS AS (qty_on_hand - qty_committed) STORED,
 
@@ -261,11 +277,25 @@ on-hand is displayed honestly rather than clamped.
 **`override_by` is nullable** because the seed fixture is authored before any admin user
 exists. The note and timestamp are not nullable for an override row — the CHECK sees to that.
 
+**`qty_committed` is written only by `apply_inventory_sync()`.** Since `0025` neither the
+`INSERT` grant nor the `UPDATE` grant to `authenticated` includes the column, so no portal
+path can enter a committed figure; a line added in the portal starts at 0 until the next sync.
+On a `manual_override` row a sync keeps the corrected on-hand, incoming, ETA and source but
+still refreshes `qty_committed` from QuickBooks.
+
 ---
 
-## 5. `0005_commitments.sql` — the delta ledger
+## 5. `0005_commitments.sql` — retained as read-only history since `0025`
 
-Ships in full in this run. Its UI does not (D8 / `PLAN.md` §"Out of scope").
+Originally the portal's delta ledger: reps recorded commitments here through
+`record_commitment()` and pending rows reduced `available`. `0025` removed that write path. The
+table, its rows, its constraints and its trigger are kept unchanged as history;
+`INSERT`/`UPDATE`/`DELETE` are revoked from `anon` and `authenticated` (there was never a write
+policy, so RLS already refused them), and `SELECT` is unchanged — a rep reads their own rows,
+an admin reads all. Nothing reads the table to compute availability any more.
+
+The definition below is the original; the lifecycle notes describe how the rows came to be in
+the states they are in.
 
 ```sql
 CREATE TABLE public.commitments (
@@ -301,20 +331,20 @@ CREATE INDEX commitments_rep_idx   ON public.commitments (rep_id, created_at DES
 CREATE INDEX commitments_state_idx ON public.commitments (state, created_at);
 ```
 
-### Lifecycle semantics — which states reduce `available`
+### Lifecycle semantics (historical — no state reduces `available` since `0025`)
 
-| State | Reduces `available`? | Set by |
+| State | Reduced `available` before `0025`? | Set by |
 |---|---|---|
-| `pending` | **Yes.** The portal knows about the sale; the source baseline does not. | `record_commitment()` on insert |
-| `confirmed_in_source` | **No.** The synced baseline's own `qty_committed` now includes it; counting it again would double-count. | `apply_inventory_sync()`, on an explicit match only |
+| `pending` | Yes. The portal knew about the sale; the source baseline did not. | `record_commitment()` on insert (dropped in `0025`) |
+| `confirmed_in_source` | No. The synced baseline's own `qty_committed` included it. | `apply_inventory_sync()`, on an explicit match only (matching removed in `0025`) |
 | `retired` | No. Terminal archival state. | Nothing in this run. Reachable only from `confirmed_in_source`. |
 
-The transition from `pending` to `confirmed_in_source` and the arrival of the new baseline
-happen **in the same transaction** inside `apply_inventory_sync()`. That matters: if they
-were separate, there would be a window where neither the ledger nor the baseline counted the
-commitment and `available` would briefly jump up — the oversell bug, in miniature.
+Before `0025` the transition from `pending` to `confirmed_in_source` and the arrival of the
+new baseline happened in the same transaction inside `apply_inventory_sync()`. Since `0025` no
+client can update a row at all, so any `pending` rows left from before the decision stay
+`pending` as history and do not affect any figure.
 
-### The state-transition trigger
+### The state-transition trigger (still installed)
 
 This is where "retirement by matching only, never by time" becomes structurally hard rather
 than merely intended. The lifecycle is a one-way ratchet with no shortcut from `pending` to
@@ -367,8 +397,9 @@ FOR EACH ROW EXECUTE FUNCTION public.enforce_commitment_invariants();
 Rejected with `KY006`: `pending → retired`, `confirmed_in_source → pending`,
 `retired → anything`, and any edit to sku/location/qty/rep_id/created_at.
 
-There is no `DELETE` policy on `commitments` (see `FUNCTIONS-AND-POLICIES.md`), so deletion
-is available only to the table owner and `service_role`, never to an application user.
+There is no `INSERT`, `UPDATE` or `DELETE` policy on `commitments` and, since `0025`, no such
+privilege for `anon` or `authenticated` either (see `FUNCTIONS-AND-POLICIES.md`). Writes are
+available only to the table owner and `service_role`, never to an application user.
 
 ---
 
@@ -389,8 +420,9 @@ ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 INSERT INTO public.app_settings (id) VALUES (true);
 ```
 
-Ships in `inventory_authority = 'quickbooks'` mode per D4 — show both numbers, never
-silently override. `stale_after_minutes = 360` (6 hours) is the concrete "staler than a few
+`inventory_authority` originally switched which figure the UI emphasised (`'quickbooks'` or
+`'portal'`). `0025` pinned it to `'quickbooks'` and the app no longer reads it: there is one
+presentation mode. The column stays for compatibility. `stale_after_minutes = 360` (6 hours) is the concrete "staler than a few
 hours" threshold; it lives in the database so it is tunable without a redeploy, and the app
 reads it rather than hard-coding it.
 
@@ -415,41 +447,21 @@ ALTER TABLE public.inventory_sync_runs ENABLE ROW LEVEL SECURITY;
 CREATE INDEX inventory_sync_runs_run_at_idx ON public.inventory_sync_runs (run_at DESC);
 ```
 
-`run_by` is nullable: a `service_role` sync has no `auth.uid()`. This table is
+`run_by` is nullable: a `service_role` sync has no `auth.uid()`. Since `0025`
+`commitments_confirmed` and `commitments_still_pending` are written as 0 on every new run;
+the columns are kept for historical rows. This table is
 admin-readable only, which gives attack 1 a second forbidden-read target beyond
 `commitments`.
 
 ---
 
-## 8. `0008_inventory_view.sql` — the availability derivation
+## 8. `v_inventory` — the availability derivation (as recreated by `0025`)
 
-Two objects. Read the note on `security_invoker` carefully; getting it wrong in either
-direction produces a bug.
-
-```sql
--- The portal delta, aggregated. SECURITY DEFINER is deliberate and load-bearing.
---
--- Reps may read only their OWN commitment rows (RLS, see FUNCTIONS-AND-POLICIES.md). If this
--- aggregate ran as the invoker, every rep would compute a portal delta that counted only
--- their own commitments and would see an availability figure that is too high for everyone
--- else's sales -- which is precisely the oversell bug this project exists to prevent.
---
--- The exposure is deliberate and bounded: this returns a TOTAL per (sku, location) and
--- nothing else. Reps learn how many units are spoken for. They do not learn by whom, when,
--- for what, or in how many separate commitments. Individual rows stay protected by RLS.
-CREATE OR REPLACE FUNCTION public.pending_commitment_totals()
-RETURNS TABLE (sku text, location text, qty_committed_portal integer)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-  SELECT c.sku, c.location, SUM(c.qty)::integer
-  FROM public.commitments c
-  WHERE c.state = 'pending'
-  GROUP BY c.sku, c.location;
-$$;
-```
+`0008` created `v_inventory` together with `pending_commitment_totals()`, a `SECURITY DEFINER`
+aggregate that summed `pending` commitments so the view could subtract a portal delta. `0025`
+dropped that function and recreated the view (a `CREATE OR REPLACE VIEW` cannot drop columns)
+without the blended columns: the view no longer has separate source, portal and total
+committed columns, and its single `qty_available` is the source figure.
 
 ```sql
 -- WITH (security_invoker = on) IS MANDATORY.
@@ -458,10 +470,6 @@ $$;
 -- postgres, which bypasses RLS -- so a default view over these tables would be a complete
 -- RLS bypass reachable with the anon key. This is a known Supabase footgun and attack 1
 -- asserts against it explicitly.
---
--- With security_invoker on, the caller's RLS applies to products and inventory (both of
--- which every authenticated user may read anyway), while the commitments aggregate arrives
--- via the SECURITY DEFINER function above. That combination is the whole point.
 CREATE VIEW public.v_inventory
 WITH (security_invoker = on)
 AS
@@ -473,11 +481,8 @@ SELECT
   p.low_stock_threshold,
   i.location,
   i.qty_on_hand,
-  i.qty_committed                                   AS qty_committed_source,
-  COALESCE(t.qty_committed_portal, 0)               AS qty_committed_portal,
-  i.qty_committed + COALESCE(t.qty_committed_portal, 0) AS qty_committed_total,
-  i.qty_available_source,
-  i.qty_available_source - COALESCE(t.qty_committed_portal, 0) AS qty_available,
+  i.qty_committed,
+  i.qty_available_source AS qty_available,
   i.qty_incoming,
   i.incoming_eta,
   i.source,
@@ -487,31 +492,29 @@ SELECT
   i.updated_at
 FROM public.products p
 JOIN public.inventory i
-  ON i.sku = p.sku
-LEFT JOIN public.pending_commitment_totals() t
-  ON t.sku = i.sku AND t.location = i.location;
+  ON i.sku = p.sku;
+
+REVOKE ALL ON public.v_inventory FROM PUBLIC, anon;
+GRANT SELECT ON public.v_inventory TO authenticated;
 ```
 
-### The four availability figures, and which one means what
+### The availability figures
 
 | Column | Definition | Used for |
 |---|---|---|
-| `qty_on_hand` | source on-hand | components line |
-| `qty_committed_source` | committed per the source (QuickBooks) | components line |
-| `qty_committed_portal` | sum of `pending` commitments | the advisory delta line |
-| `qty_available_source` | `on_hand − committed_source` | primary figure in `quickbooks` mode |
-| `qty_available` | `on_hand − committed_source − committed_portal` | primary figure in `portal` mode; **always** drives the status badge |
+| `qty_on_hand` | on hand per the source (or the admin's correction on an override row) | components line |
+| `qty_committed` | quantity on open sales orders in QuickBooks | components line; "Committed (QuickBooks sales orders)" |
+| `qty_available` | `qty_on_hand − qty_committed` | the single primary figure; drives the status badge |
 
 **`available` is never clamped at zero.** A negative figure is real information — it means
-the source reported an on-hand drop below what is already spoken for. Clamping it would hide
-exactly the condition a rep needs to see. It renders as a negative number with the
-"none available" status treatment.
+QuickBooks has more on open sales orders than on hand. Clamping it would hide exactly the
+condition a rep needs to see. It renders as a negative number with the "none available"
+status treatment.
 
-**The status badge is always computed from `qty_available`, the most conservative figure, in
-both authority modes.** Authority mode governs presentation emphasis, not safety. A status
-that said "in stock" because QuickBooks had not caught up yet would reintroduce the bug the
-project exists to prevent. This is a deliberate decision, recorded in `PLAN.md` §"Assumptions
-and decisions" as decision A5.
+**What this figure does not include.** Stock promised to a customer before a sales order is
+entered in QuickBooks is not counted as committed. That is the accepted trade-off of the
+3 Oct 2026 decision (`QUESTIONS-FOR-LEVON.md` item 3); the client enters sales orders
+promptly.
 
 ---
 
@@ -526,6 +529,10 @@ and decisions" as decision A5.
 | `0005_commitments.sql` | `commitments` + RLS on + 3 indexes + `enforce_commitment_invariants()` trigger |
 | `0006_app_settings.sql` | `app_settings` singleton + RLS on + the single row |
 | `0007_inventory_sync_runs.sql` | `inventory_sync_runs` + RLS on + 1 index |
-| `0008_inventory_view.sql` | `pending_commitment_totals()` + `v_inventory` (security_invoker) |
+| `0008_inventory_view.sql` | `pending_commitment_totals()` + `v_inventory` (security_invoker) — both superseded by `0025` |
 
-Continued in `FUNCTIONS-AND-POLICIES.md`: `0009`–`0012`.
+Continued in `FUNCTIONS-AND-POLICIES.md`: `0009`–`0012` and the later migrations through
+`0025`. `0025_quickbooks_sourced_commitments.sql` recreates `v_inventory` (§8), drops
+`pending_commitment_totals()` and `record_commitment()`, revokes client writes on
+`commitments`, column-scopes `inventory` `INSERT` without `qty_committed`, and pins
+`app_settings.inventory_authority` to `'quickbooks'`.

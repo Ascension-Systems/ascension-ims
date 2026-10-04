@@ -16,7 +16,7 @@
  * THE RULE: every hosted statement that writes targets either
  *   (a) a harness-owned disposable row in the KYV namespace, or
  *   (b) app_settings, written back to its own current value.
- * No SEA-* row is mutated. SEA-9001..SEA-9007 and the demo delta are READ-ONLY here.
+ * No SEA-* row is mutated. SEA-9001..SEA-9007 are READ-ONLY here.
  *
  * This weakens nothing. RLS policies are table-scoped, not SKU-scoped: proving
  * `inventory_update_admin` on KYV-0001 is exactly as strong as proving it on SEA-9007, and
@@ -53,11 +53,11 @@ export const KYV_LOCATION_ALT = 'kyv-verify-2'
  * |----------|-----------|-----------------------------------------|----------------------------|
  * | INV      | KYV-0001  | on hand 100, committed 0                | 1.5, 1.5b, 1.6, 4.1, 4.12a |
  * | DEL      | KYV-0002  | on hand 5 — created to be destroyed     | 1.7, 1.7b, 4.3             |
- * | GEN      | KYV-0003  | 200 on hand / 186 committed -> 14 avail | attack 1 setup commitments |
- * | CONT1    | KYV-0004  | on hand 1 -> available exactly 1        | 2b 1-unit swarm, 2a.10     |
- * | CONT3    | KYV-0005  | on hand 3 -> available 3                | 2b 3-unit swarm            |
- * | DLT      | KYV-0006  | 40 on hand / 10 committed -> 30 avail   | attack 3                   |
- * | OVR      | KYV-0007  | manual_override contradicting the source| 3.11                       |
+ * | GEN      | KYV-0003  | 200 on hand / 186 committed -> 14 avail | attack 1 historical rows   |
+ * | CONT1    | KYV-0004  | on hand 1 -> available exactly 1        | 2.2 (committed > on hand)  |
+ * | CONT3    | KYV-0005  | on hand 3 -> available 3                | 2.1                        |
+ * | DLT      | KYV-0006  | 40 on hand / 10 committed -> 30 avail   | 2.3, 2.7                   |
+ * | OVR      | KYV-0007  | manual_override contradicting the source| 2.8, 2.8b                  |
  */
 export const SKU = {
   INV: 'KYV-0001',
@@ -137,7 +137,7 @@ const OVERRIDE_ROW = {
   override_at: new Date().toISOString(),
 }
 
-/** The source row 3.11 feeds the sync — deliberately contradicting the override above. */
+/** The source row 2.8 feeds the sync — deliberately contradicting the override above. */
 export const OVERRIDE_SOURCE_ROW = {
   sku: SKU.OVR,
   location: KYV_LOCATION,
@@ -163,7 +163,7 @@ const q = encodeURIComponent
  * its inventory rows at EVERY location, which is what sweeps up KYV-9999 and the
  * `kyv-verify-2` row if an assertion that should have been refused ever succeeds.
  *
- * Scoped by location and by the KYV- prefix. It cannot touch a SEA-* row or the demo delta.
+ * Scoped by location and by the KYV- prefix. It cannot touch a SEA-* row.
  *
  * ------------------------------------------------------------------------------------
  * THE NAMESPACE IS ONE PREFIX, AND EVERY PREDICATE MUST MATCH ALL OF IT
@@ -232,42 +232,16 @@ export async function rawInventoryRow(cfg, identities, sku, location = KYV_LOCAT
 }
 
 /**
- * Pending commitment count for one fixture, service-role, scoped to the KYV namespace.
- *
- * Counted with `Prefer: count=exact` (PostgREST's Content-Range) rather than by measuring a
- * returned array. A row payload is subject to whatever `max-rows` the deployment configures,
- * and a silently truncated array would turn a wrong count into a confident assertion.
+ * Seeds one HISTORICAL commitment row as service_role. Since 0025 the portal has no write path
+ * to `commitments` (record_commitment dropped, client write privileges revoked); the table is
+ * read-only history. Attack 1 still needs one rep-owned and one admin-owned row to prove the
+ * read-isolation policy, so they are written here by the service role, inside the KYV
+ * namespace that teardownFixtures sweeps.
  */
-export async function pendingCount(cfg, identities, sku, location = KYV_LOCATION) {
-  const res = await countRows(
-    cfg,
-    identities.service,
-    'commitments',
-    `sku=eq.${q(sku)}&location=eq.${q(location)}&state=eq.pending`,
-  )
-  return res.ok ? res.count : null
-}
-
-/**
- * Project-wide pending commitment count.
- *
- * Needed because `apply_inventory_sync` computes `commitments_still_pending` as
- * `SELECT count(*) FROM public.commitments WHERE state = 'pending'`
- * (0010_fn_apply_inventory_sync.sql:148) — GLOBAL, not scoped to the payload. On a hosted
- * project the demo delta and any prior harness rows inflate it, so assertions on that field
- * are made as DELTAS against this figure rather than as absolutes.
- */
-export async function globalPendingCount(cfg, identities) {
-  const res = await countRows(cfg, identities.service, 'commitments', 'state=eq.pending')
-  return res.ok ? res.count : null
-}
-
-/** Records a commitment through the RPC as a given identity. */
-export async function recordCommitment(cfg, identity, sku, qty, note = null, location = KYV_LOCATION) {
-  const res = await rest(cfg, identity, 'POST', '/rpc/record_commitment', {
-    body: { p_sku: sku, p_qty: qty, p_location: location, p_note: note },
-  })
-  return res
+export async function seedHistoricalCommitment(cfg, identities, repId, sku, qty, note = null, location = KYV_LOCATION) {
+  return insertRows(cfg, identities.service, 'commitments', [
+    { sku, location, qty, rep_id: repId, state: 'pending', note },
+  ])
 }
 
 /** Runs apply_inventory_sync through the RPC as a given identity. */
@@ -278,10 +252,10 @@ export async function applySync(cfg, identity, payload) {
 /** The disclosure printed in the run banner and repeated in the summary. */
 export const ARTEFACT_DISCLOSURE = [
   'THIS RUN WRITES TO THE LIVE PROJECT. Per full run it creates and deletes roughly 7',
-  'products prefixed KYV-, 7 inventory rows at location \'kyv-verify\', on the order of 45',
+  'products prefixed KYV-, 7 inventory rows at location \'kyv-verify\', 2 historical',
   'commitment rows and around a dozen inventory_sync_runs rows. It touches app_settings only',
-  'by writing its current value back to itself. It does NOT modify any SEA-* seed row or the',
-  'demo delta. While the artefacts exist they are visible in the application\'s inventory',
+  'by writing its current value back to itself. It does NOT modify any SEA-* seed row.',
+  'While the artefacts exist they are visible in the application\'s inventory',
   'list under the category "KYV verification artefact". If the harness is killed mid-run the',
   'KYV rows and the test identities survive; `npm run verify:identities:remove` is the remedy.',
 ]

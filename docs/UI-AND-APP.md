@@ -1,9 +1,14 @@
 # APPLICATION LAYER — Ascension Sales Portal (step 1)
 
-Companion to `PLAN.md`. Auth flow, the QuickBooks adapter, authority modes, the inventory
-view, the achromatic status encoding, and the seed generator.
+Companion to `PLAN.md`. Auth flow, the QuickBooks adapter, the availability presentation, the
+inventory view, the achromatic status encoding, and the seed generator.
 
 Schema is in `SCHEMA.md`; policies and functions in `FUNCTIONS-AND-POLICIES.md`.
+
+> **Since `0025` (3 Oct 2026)** "committed" is QuickBooks' quantity on open sales orders and
+> nothing else. Reps do not record commitments in the portal: there is no "My commitments"
+> page, no commit form, no `/api/commitments` route and no reconciliation queue. The inventory
+> list has one presentation mode (§3).
 
 ---
 
@@ -168,52 +173,46 @@ component, not a query. That is the contract, and it is the reason for the three
 
 `lib/inventory-source.stub.ts` reads the current source-of-record rows via the service-role
 client and returns them unchanged. It is deliberately boring: it stands in for "QuickBooks
-said the same thing again," which is precisely the stale-baseline condition attack 3 needs.
-It does **not** invent drift, jitter, or random movement — a stub that changes numbers by
+said the same thing again." It does **not** invent drift, jitter, or random movement — a stub that changes numbers by
 itself makes every test non-deterministic.
 
+`qty_committed` on each row is QuickBooks' quantity on open sales orders for that item. The
+adapter is the only way a committed figure reaches the database.
+
 `app/api/sync/route.ts` is the only caller: `requireAdmin()` → `getInventorySource().fetchInventory()`
-→ `apply_inventory_sync({ rows, matches: [] })`. There is no scheduled job in this run.
+→ `apply_inventory_sync({ rows })`. It sends no `matches` (a non-empty array is refused with
+`KY016` since `0025`). The response carries `run_id`, `rows_applied`, `overrides_preserved` and
+`rejected`; the sync button reports rows applied and manual overrides kept.
 
 ---
 
-## 3. `inventory_authority` — one code path, two modes
+## 3. Availability presentation — one mode
 
-**Both modes read the same view, compute the same five figures, and render the same
-component.** The setting changes which figure is typographically primary and how the
-secondary line is worded. There is no branch in the data layer, no second query, no alternate
-component, and no `if (mode === 'portal')` anywhere outside `availability-block.tsx`.
+Until `0025` an `app_settings.inventory_authority` flag switched between a `quickbooks` and a
+`portal` presentation, which differed only in which figure was emphasised. With committed
+taken from QuickBooks alone there is only one figure, so there is one mode. The column is
+pinned to `'quickbooks'` and the app no longer reads it.
 
-Read once per request in `app/inventory/page.tsx` via `lib/settings.ts`, passed down as a
-prop. Flipping the flag is a one-row `UPDATE` by an admin; no deploy.
-
-### `quickbooks` mode — shipping default (D4)
+`lib/status.ts` `availabilityPresentation(row)` returns data, not markup, so there is one
+rendering path (`components/availability-block.tsx`):
 
 ```
-AVAILABLE (QuickBooks)          30          ← qty_available_source, 28px/700
-40 on hand · 10 committed in QuickBooks     ← components line, 14px
-⚑ 6 more committed by reps, not yet in QuickBooks → 24 available   ← advisory, only when delta > 0
+AVAILABLE (QUICKBOOKS)          30          ← qty_available, 28px/700
+40 on hand · 10 committed in QuickBooks · 48 incoming   ← components line, 14px
 Source: QuickBooks (stub) · updated 4 minutes ago
 ```
 
-### `portal` mode
+The incoming part of the components line appears only when `qty_incoming > 0`. The expanded
+row lists "Committed (QuickBooks sales orders)" and "Available" as separate detail rows.
 
-```
-AVAILABLE                       24          ← qty_available, 28px/700
-40 on hand · 16 committed (10 QuickBooks + 6 rep)
-QuickBooks alone shows 30 available          ← the source figure stays visible
-Source: QuickBooks (stub) · updated 4 minutes ago
-```
+**Nothing is hidden.** The components line always shows both inputs, so a rep can see how the
+figure was reached.
 
-**Neither mode hides a number. Neither mode silently overrides.** In both, both figures are on
-screen; only the emphasis moves. That is what "a setting, not a fork" means concretely.
+**The status badge is computed from `qty_available`** (on hand − committed in QuickBooks).
 
-**The status badge is computed from `qty_available` (the conservative figure) in both modes** —
-see decision A5 in `PLAN.md`. Authority governs emphasis, not safety.
-
-The advisory line renders only when `qty_committed_portal > 0`. With no commitments recorded
-yet — the state a fresh demo starts in — every row shows the plain QuickBooks picture, which
-is correct and not a bug.
+**What the figure cannot show.** Stock promised to a customer before a sales order is entered
+in QuickBooks does not appear as committed. That is the accepted trade-off of the 3 Oct 2026
+decision (`QUESTIONS-FOR-LEVON.md` item 3); the client enters sales orders promptly.
 
 ---
 
@@ -223,8 +222,8 @@ Route: `/inventory`. It is the app. There is no other authenticated screen in st
 
 ### 4.1 Data flow
 
-`app/inventory/page.tsx` (RSC): `requireUser()` → `getSettings()` → `SELECT * FROM v_inventory
-ORDER BY name` via the cookie-bound anon client → pass rows, settings and a server `now` into
+`app/inventory/page.tsx` (RSC): `requireUser()` → `getSettings()` (thresholds only) →
+`SELECT * FROM v_inventory ORDER BY name` via the cookie-bound anon client → pass rows, settings and a server `now` into
 `<InventoryList>` (client component).
 
 **Fetch all rows, filter on the client.** The catalogue is ~96 rows / ~30KB of JSON. A round
@@ -464,52 +463,45 @@ realistic spread of statuses across the list without any of them being fixtures.
 | `SEA-9003` | **Admin override contradicting the source** | `source='manual_override'`, `on_hand 48, committed 6`, `override_note` recording that a physical count found 12 fewer than QuickBooks reported (which showed 60), `override_at = now() - interval '2 hours'`, `source_payload.last_source_snapshot` carrying the contradicting QuickBooks figure so both numbers are on screen |
 | `SEA-9004` | **Long product name threatening mobile layout** | ~124 characters: *"Continental Executive High-Back Ergonomic Swivel Conference Chair with Adjustable Lumbar Support and Polished Aluminium Base"* |
 | `SEA-9005` | **Stale row** (added — see note) | `updated_at = now() - interval '3 days'` → **Stale** badge |
-| `SEA-9006` | **Last-unit test SKU** (added — see note) | `on_hand 1, committed 0, incoming 0` → available exactly **1** |
-| `SEA-9007` | **Delta-ledger baseline** (added — see note) | `on_hand 40, committed 10` → available **30**; the brief's own worked example |
+| `SEA-9006` | **Last-unit SKU** (added — see note) | `on_hand 1, committed 0, incoming 0` → available exactly **1** |
+| `SEA-9007` | **Worked-example baseline** (added — see note) | `on_hand 40, committed 10` → available **30**; the brief's own worked example |
 
 **Note on `SEA-9005`–`9007`.** The brief pins four fixtures; these three are additions, each
 in direct service of a stated requirement rather than scope expansion: the stale threshold
-cannot be demonstrated without a stale row, and attacks 2 and 3 need deterministic SKUs with
-known starting quantities. Recorded as decision A6 in `PLAN.md`.
+cannot be demonstrated without a stale row, and the verification suites need deterministic
+SKUs with known starting quantities. Recorded as decision A6 in `PLAN.md`. `SEA-9006` and
+`SEA-9007` were introduced for the retired portal-commitment attacks; since `0025` attack 2
+uses them for a negative-availability row and a committed-figure sync.
 
 `SEA-9003`'s override is **seed data** — an inventory row whose `source` reflects an override.
 It is **not** step-3 admin editing UI, and no editing interface ships in this run.
 
 ### 7.4 `supabase/seed/0003_seed_demo_delta.sql` — hand-written, not generated
 
-Commitments reference `profiles(id)`, which does not exist until the Human creates users. This
-file is applied **after** at least one rep exists, and degrades gracefully if not:
+The filename is historical: until `0025` this file also created a demo rep commitment on
+`SEA-9007`. Since `0025` the portal records no commitments, and the file only credits
+`SEA-9003`'s seeded override to the earliest admin profile. `override_by` references
+`profiles(id)`, which does not exist until the Human creates users, so the file is applied
+**after** the real admin has signed in, and degrades gracefully if not:
 
 ```sql
 DO $$
-DECLARE v_rep uuid; v_admin uuid;
+DECLARE v_admin uuid;
 BEGIN
-  SELECT id INTO v_rep   FROM public.profiles WHERE role = 'rep'   ORDER BY created_at LIMIT 1;
   SELECT id INTO v_admin FROM public.profiles WHERE role = 'admin' ORDER BY created_at LIMIT 1;
-
-  IF v_admin IS NOT NULL THEN
-    UPDATE public.inventory SET override_by = v_admin
-     WHERE sku = 'SEA-9003' AND override_by IS NULL;
-  END IF;
-
-  IF v_rep IS NULL THEN
-    RAISE NOTICE 'No rep profile yet; skipping demo delta. Re-run after a rep signs in.';
+  IF v_admin IS NULL THEN
+    RAISE NOTICE 'No admin profile yet; skipping. Re-run after the admin signs in.';
     RETURN;
   END IF;
-
-  IF EXISTS (SELECT 1 FROM public.commitments) THEN
-    RAISE NOTICE 'Commitments already exist; skipping demo delta.';
-    RETURN;
-  END IF;
-
-  INSERT INTO public.commitments (sku, location, qty, rep_id, state, note)
-  VALUES ('SEA-9007', 'default', 6, v_rep, 'pending', 'Demo delta: recorded in portal, not yet in QuickBooks');
+  UPDATE public.inventory SET override_by = v_admin
+   WHERE sku = 'SEA-9003' AND override_by IS NULL;
 END $$;
 ```
 
-This produces the brief's exact worked example on `SEA-9007`:
-`40 on hand · 10 committed in QuickBooks · ⚑ 6 more committed by reps → 24 available`,
-which makes the show-both-numbers presentation demoable without any step-2 UI.
+Run order matters because the earliest admin is the one credited: a verification test admin
+created first would be credited instead, and `SEA-9003` would lose its attribution when that
+test admin is removed. `npm run verify:identities` refuses to run until `SEA-9003` is
+attributed to a real (non-test) admin.
 
 ### 7.5 No credentials, anywhere
 

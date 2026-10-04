@@ -10,7 +10,7 @@ import { notifyAdmins } from '@/lib/push'
  *
  * A SHARED CODE THAT CANNOT LOG ANYONE IN. The code permits JOINING only, and is worthless on
  * its own: it must be paired with an address an admin already added to `invited_reps`. Every
- * commitment is attributed to a specific rep, so identity is not negotiable here.
+ * account is a specific, invited rep, so identity is not negotiable here.
  *
  * NO EMAIL IS EVER SENT. The rep sets their own password and is signed in immediately. That is
  * the whole point -- no inbox to wait on, no link to click.

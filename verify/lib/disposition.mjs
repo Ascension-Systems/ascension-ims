@@ -86,7 +86,7 @@ export function computeDisposition(manifest = MANIFEST) {
   return {
     attacks: scope(
       manifest.filter((e) => ATTACK_SUITES.includes(e.suite)),
-      'THE FOUR REQUIRED ATTACKS (suites 1-4)',
+      'THE REQUIRED ATTACKS (suites 1, 2, 4)',
     ),
     regression: scope(
       manifest.filter((e) => REGRESSION_SUITES.includes(e.suite)),

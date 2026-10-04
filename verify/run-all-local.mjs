@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `npm run verify:local` — the four attacks against an EPHEMERAL LOCAL PostgreSQL server.
+ * `npm run verify:local` — the attack suites (1, 2, 4) against an EPHEMERAL LOCAL PostgreSQL server.
  *
  * ------------------------------------------------------------------------------------
  * THIS IS NOT THE HOSTED PATH AND IS NEVER A CLAIM ABOUT THE HOSTED PROJECT.
@@ -33,11 +33,10 @@ import {
   renderInvariantFailure,
 } from './lib/disposition.mjs'
 import attack1 from './01-rls-bypass.mjs'
-import attack2 from './02-concurrent-last-unit.mjs'
-import attack3 from './03-stale-baseline.mjs'
+import attack2 from './02-quickbooks-sole-source.mjs'
 import attack4 from './04-role-enforcement.mjs'
 
-const ATTACKS = [attack1, attack2, attack3, attack4]
+const ATTACKS = [attack1, attack2, attack4]
 
 const RLS_SEMANTICS_NOTE = `
   A NOTE ON HOW A REFUSAL IS ASSERTED. Postgres raises 42501 for an INSERT that violates a
@@ -56,7 +55,7 @@ async function main() {
     [
       '',
       '='.repeat(78),
-      'VERIFICATION HARNESS (LOCAL) — the four required attacks',
+      'VERIFICATION HARNESS (LOCAL) — the required attacks (1, 2, 4)',
       '='.repeat(78),
       PATH_CAVEAT.trimEnd().replace(/^\n/, ''),
       '',

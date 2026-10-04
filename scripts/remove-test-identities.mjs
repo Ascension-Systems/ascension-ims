@@ -171,7 +171,7 @@ async function main() {
         ? allCommits.rows.map((r) => `      ${r.sku} qty ${r.qty} ${r.state} — ${r.note ?? ''}`)
         : []),
       '',
-      '  The demo delta (SEA-9007 / 6 / pending) should be the only commitment left.',
+      "  Commitments are read-only history since 0025; none should remain at 'kyv-verify'.",
       '',
     ].join('\n') + '\n',
   )

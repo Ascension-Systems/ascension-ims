@@ -12,8 +12,7 @@ function secretMatches(provided: string | null, expected: string): boolean {
 }
 
 /**
- * POST -> the morning digest to admins: everything low on stock plus yesterday's commitment
- * count, one notification. Fired by the scheduled Netlify function (netlify/functions/
+ * POST -> the morning digest to admins: everything low on stock, one notification. Fired by the scheduled Netlify function (netlify/functions/
  * daily-digest.mjs), authenticated by the PUSH_CRON_SECRET header — no session, no cookies,
  * so the guard is a shared secret the same way a webhook would be.
  *
@@ -32,21 +31,16 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient()
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const [{ data: inv }, { count: committed }] = await Promise.all([
-    admin
-      .from('v_inventory')
-      .select('sku, name, qty_available, low_stock_threshold')
-      .order('qty_available', { ascending: true })
-      .limit(500),
-    admin.from('commitments').select('id', { count: 'exact', head: true }).gte('created_at', since),
-  ])
+  const { data: inv } = await admin
+    .from('v_inventory')
+    .select('sku, name, qty_available, low_stock_threshold')
+    .order('qty_available', { ascending: true })
+    .limit(500)
 
   // Per-product thresholds: PostgREST cannot compare two columns to each other, so the
   // low filter runs here. The catalogue is small (~100 lines); reading it whole is fine.
   const lowLines = (inv ?? []).filter((l) => l.qty_available <= (l.low_stock_threshold ?? LOW_STOCK_DEFAULT))
   const parts: string[] = []
-  parts.push(`${committed ?? 0} commitment${(committed ?? 0) === 1 ? '' : 's'} in the last day.`)
   if (lowLines.length === 0) {
     parts.push('Nothing low on stock.')
   } else {
@@ -57,5 +51,5 @@ export async function POST(request: Request) {
   }
 
   await notifyAdmins({ title: 'Daily inventory digest', body: parts.join(' '), url: '/inventory' })
-  return NextResponse.json({ ok: true, low: lowLines.length, committed: committed ?? 0 }, { status: 200 })
+  return NextResponse.json({ ok: true, low: lowLines.length }, { status: 200 })
 }

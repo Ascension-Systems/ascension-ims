@@ -5,9 +5,9 @@ import { getInventorySource } from '@/lib/inventory-source'
 import { mapPostgresError } from '@/lib/errors'
 
 /**
- * POST -> adapter + apply_inventory_sync. Admin only. Manual; there is no scheduled job in
- * this run, deliberately: an unattended job is the most likely place a time-based retirement
- * would later creep in.
+ * POST -> adapter + apply_inventory_sync. Admin only. Applies the source's rows: on hand,
+ * committed (QuickBooks open sales orders — the only source of committed since 0025) and
+ * incoming.
  *
  * TWO LAYERS OF ROLE ENFORCEMENT, and the database one is authoritative:
  *
@@ -16,9 +16,6 @@ import { mapPostgresError } from '@/lib/errors'
  *
  * Attack 4 bypasses this handler entirely and calls the function directly, to prove layer 2
  * is real. Hiding a button is not access control and this guard is not it either.
- *
- * `matches` is empty for every stub sync. That is the normal case, and it is exactly the case
- * attack 3 exercises: a source that has not caught up must NOT retire a pending commitment.
  */
 export async function POST() {
   const admin = await requireAdmin()
@@ -49,7 +46,7 @@ export async function POST() {
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc('apply_inventory_sync', {
-    p_payload: { rows, matches: [] },
+    p_payload: { rows },
   })
 
   if (error) {

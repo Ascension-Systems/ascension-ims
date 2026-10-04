@@ -14,13 +14,13 @@ export type ApiErrorBody = {
 type Mapping = { status: number; error: string; message: string }
 
 const MAP: Record<string, Mapping> = {
-  KY001: {
-    status: 409,
-    error: 'INSUFFICIENT_AVAILABILITY',
-    message: 'Another rep committed the last unit first.',
-  },
   KY002: { status: 401, error: 'NOT_AUTHENTICATED', message: 'Sign in to continue.' },
   KY003: { status: 403, error: 'FORBIDDEN_ROLE', message: 'This action requires an admin account.' },
+  KY016: {
+    status: 409,
+    error: 'COMMITMENT_MATCHING_REMOVED',
+    message: 'Commitment matching was removed; committed quantities come from QuickBooks.',
+  },
   KY004: { status: 400, error: 'INVALID_INPUT', message: 'That request was not valid.' },
   KY005: { status: 404, error: 'UNKNOWN_SKU_LOCATION', message: 'No such product at that location.' },
   KY006: {
@@ -64,20 +64,4 @@ const INTERNAL: Mapping = {
 export function mapPostgresError(error: PostgresErrorLike | null | undefined): Mapping {
   const code = error?.code ?? ''
   return Object.hasOwn(MAP, code) ? MAP[code]! : INTERNAL
-}
-
-/**
- * Parses the availability figure out of record_commitment's KY001 message so the client can
- * be told how many are actually left.
- *
- * The BRANCH is on the SQLSTATE, never on this text. This only enriches an already-decided
- * 409 response, and returns null rather than throwing if the message shape ever changes.
- */
-export function parseInsufficientAvailability(
-  message: string | null | undefined,
-): { requested: number; available: number } | null {
-  if (!message) return null
-  const m = /requested (-?\d+), available (-?\d+)/.exec(message)
-  if (!m || m[1] === undefined || m[2] === undefined) return null
-  return { requested: Number(m[1]), available: Number(m[2]) }
 }

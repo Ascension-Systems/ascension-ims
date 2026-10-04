@@ -5,6 +5,21 @@
 **Build location:** `projects/ascension-portal/` — its own git repository. Nothing outside it.
 **Status:** build-ready.
 
+> **Superseded in part, 3 Oct 2026 (migration `0025_quickbooks_sourced_commitments.sql`).**
+> Reps no longer record commitments in the portal. "Committed" is QuickBooks Desktop's quantity
+> on open sales orders, delivered by the inventory adapter through `apply_inventory_sync`, and
+> available = on hand − committed in QuickBooks. `record_commitment()` and
+> `pending_commitment_totals()` are dropped; `apply_inventory_sync` takes rows only (a
+> non-empty `matches` array is refused with `KY016`); `commitments` is kept as read-only
+> history; `app_settings.inventory_authority` is pinned to `'quickbooks'` and there is one
+> presentation mode. The commitment UI later built (`/my-commitments`, `/reconciliation`,
+> `/api/commitments`, the commit form) was removed. Verification attack 2 is replaced by
+> "QuickBooks is the only source of committed" and attack 3 is retired. Accepted trade-off:
+> stock promised before a sales order exists is not shown as committed
+> (`QUESTIONS-FOR-LEVON.md` item 3). The plan below is kept as written; sections marked
+> *(superseded by 0025)* describe the design as it was. Current state: `SCHEMA.md`,
+> `FUNCTIONS-AND-POLICIES.md`, `UI-AND-APP.md`, `VERIFICATION.md`.
+
 ## This plan is four documents
 
 | Document | Contents |
@@ -37,7 +52,7 @@ Build-order **step 1 only**: auth + inventory view + seed data. It must stand al
 demoable artifact: sign in → searchable/filterable inventory list with
 on-hand / committed / available / incoming and freshness.
 
-### The one deliberate carve-out
+### The one deliberate carve-out *(superseded by 0025)*
 
 All four verification requirements (brief lines 184–205) must be attackable by Ferb in this
 run. Two of them concern the commitments ledger, nominally step 2. Settled resolution:
@@ -62,7 +77,7 @@ not a defect and must not be reported as one.
 
 | Not in this run | Status |
 |---|---|
-| **Step 2 UI** — rep commitment recording screen, form, button, "record a sale" flow | Approved in principle (D1), HELD (D8) |
+| **Step 2 UI** — rep commitment recording screen, form, button, "record a sale" flow *(superseded by 0025: dropped)* | Approved in principle (D1), HELD (D8) |
 | **Step 3 UI** — admin inventory editing, override editing, reconciliation view / backlog list | Approved in principle (D1), HELD (D8) |
 | **Promotions** (build-order 4) | Approved in principle, not this run (D1) |
 | **Document library** (build-order 5) | Approved in principle, not this run (D1) |
@@ -334,7 +349,7 @@ Two supporting mechanisms that are part of this requirement, not extras:
 
 Full SQL: `FUNCTIONS-AND-POLICIES.md` §3–§4.
 
-### 6.2 Concurrent commitment on the last unit — the concurrency control
+### 6.2 Concurrent commitment on the last unit — the concurrency control *(superseded by 0025)*
 
 **Mechanism: `SELECT … FOR UPDATE` on the `inventory` row, inside a `SECURITY DEFINER`
 plpgsql function (`record_commitment`), exposed as a PostgREST RPC.**
@@ -374,7 +389,7 @@ never on message text.
 
 Full SQL: `FUNCTIONS-AND-POLICIES.md` §1.
 
-### 6.3 Delta survives a stale baseline — lifecycle and matching
+### 6.3 Delta survives a stale baseline — lifecycle and matching *(superseded by 0025)*
 
 Lifecycle as schema: `pending → confirmed_in_source → retired`, enforced by a `BEFORE UPDATE`
 trigger that permits **only** those two transitions and rejects everything else with `KY006`,
@@ -455,6 +470,7 @@ Full detail: `VERIFICATION.md` §6.
    `FUNCTIONS-AND-POLICIES.md`. Write them; **do not apply them to anything hosted.** Commit.
 3. **Seed generator** (`scripts/generate-seed.mjs`) + run it + commit both the script and its
    output (`supabase/seed/0001`, `0002`). Hand-write `0003_seed_demo_delta.sql`. Commit.
+   *(superseded by 0025: `0003` now only credits `SEA-9003`'s override to the earliest admin.)*
 4. **Local database + verification harness.** `verify/shim/00_auth_shim.sql`,
    `verify/lib/harness.mjs`, `00-setup.sql`, then attacks `01`–`04` and `run-all.mjs`.
    **Run them and make them pass before building any UI.** If the concurrency control or a
@@ -463,7 +479,8 @@ Full detail: `VERIFICATION.md` §6.
    `/login/check-email`, `/auth/callback`, `/auth/auth-code-error`, `/signout`. Commit.
 6. **Adapter + route handlers.** `lib/inventory-source.ts`, `lib/inventory-source.stub.ts`,
    `lib/errors.ts`, `app/api/commitments/route.ts`, `app/api/sync/route.ts`. Re-run attack 2's
-   HTTP assertion and attack 4's 4.9/4.10. Commit.
+   HTTP assertion and attack 4's 4.9/4.10. Commit. *(superseded by 0025: `app/api/commitments`
+   removed.)*
 7. **Design tokens + status logic.** `app/globals.css`, `lib/status.ts`,
    `lib/relative-time.ts`, `components/icons.tsx`, `status-badge`, `stale-badge`,
    `relative-time`. Commit.
@@ -486,12 +503,12 @@ Steps 1–4 before any UI is the important ordering constraint. Everything else 
 | # | Question | Assumption |
 |---|---|---|
 | D4-1 | Where does inventory truth live today? | The admin-editing/override layer is a **permanent** layer, not interim scaffolding. Overrides are first-class, attributed and timestamped. |
-| D4-2 | Sales Orders or Invoices, and when entered? | The QuickBooks baseline is **stale and incomplete**; source `committed` may be understated. The delta ledger compensates. |
+| D4-2 | Sales Orders or Invoices, and when entered? | The QuickBooks baseline is **stale and incomplete**; source `committed` may be understated. The delta ledger compensates. *(superseded by 0025: decided 3 Oct 2026 — committed is taken from QuickBooks sales orders only.)* |
 | D4-3 | Multi-location? | Single location. Stub writes `location = 'default'`. Column exists; no UI. |
 | D4-5 | Real product names? | Generic but realistic furniture catalogue, invented SKUs and names, no logos. |
 
 Ships in `inventory_authority = 'quickbooks'` mode — show both numbers, never silently
-override. None of these may be presented to anyone as established fact.
+override. *(Superseded by 0025: one presentation mode; the setting is pinned and not read.)* None of these may be presented to anyone as established fact.
 
 ### Decisions made by Starter in this plan
 
@@ -508,7 +525,7 @@ override. None of these may be presented to anyone as established fact.
 | **A9** | Plain CSS + CSS Modules rather than Tailwind | The achromatic token set must be auditable in one place so `ui` reads tokens rather than hunting utility classes. |
 | **A10** | Sync is manual (`POST /api/sync`) with no scheduled job | Nothing in the brief asks for a scheduler in step 1, and an unattended job is the most likely place a time-based retirement would later creep in. |
 
-### Deferred to step 3 — noted, not decided here
+### Deferred to step 3 — noted, not decided here *(commitment items superseded by 0025)*
 
 - **Commitment cancellation.** The brief names exactly three lifecycle states and none of them
   represents "recorded in error." A rep who mis-keys a commitment currently has no way to undo

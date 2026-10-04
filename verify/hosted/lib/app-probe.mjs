@@ -7,14 +7,16 @@
  * Without it, a 401 at 4.9 means either "the guard works" or "my cookie is malformed", and
  * those are opposite findings. The probe discriminates:
  *
- *   POST {PORTAL_BASE_URL}/api/commitments
- *     cookie: <rep session cookies>
- *     body:   { sku: KYV-0004, qty: 999999, location: 'kyv-verify' }
+ *   POST {PORTAL_BASE_URL}/api/documents
+ *     cookie: <rep session cookies>      (no body)
  *
- * An authenticated rep gets 409 INSUFFICIENT_AVAILABILITY
- * (app/api/commitments/route.ts:66-79). A caller the app does not recognise never reaches
- * the handler at all: `middleware.ts` matches /api/* and redirects an unauthenticated
- * request to /login before the route runs. Either way the probe FAILS, so it writes nothing.
+ * An authenticated rep gets 403 FORBIDDEN_ROLE from requireAdmin(), the first statement of
+ * the POST handler in app/api/documents/route.ts, before the request body is even read. A
+ * caller the app does not recognise never reaches the handler at all: `middleware.ts` matches
+ * /api/* and redirects an unauthenticated request to /login before the route runs. Either way
+ * the probe writes nothing. (Until 0025 this probe used /api/commitments, which no longer
+ * exists. It deliberately does NOT use /api/sync: that is 4.9's own subject, and a broken
+ * guard there would let the probe run a real sync.)
  *
  * If the cookie is not accepted, every HTTP assertion reports
  * `NOT EXECUTED — rep session cookie not accepted by the app` rather than FAIL.
@@ -22,7 +24,6 @@
 
 import { appFetch, isLoginRedirect } from './client.mjs'
 import { sessionCookieHeader, chunkCount } from './cookies.mjs'
-import { KYV_LOCATION, SKU } from './fixtures.mjs'
 
 export const NOT_EXECUTED_NO_BASE_URL =
   'NOT EXECUTED — PORTAL_BASE_URL not set; the app was not running'
@@ -37,11 +38,7 @@ export async function probeAppSession(cfg, repSession) {
   const cookie = sessionCookieHeader(cfg.url, repSession)
   const chunks = chunkCount(cfg.url, repSession)
 
-  const res = await appFetch(cfg.portalBaseUrl, '/api/commitments', {
-    method: 'POST',
-    cookie,
-    body: { sku: SKU.CONT1, qty: 999999, location: KYV_LOCATION },
-  })
+  const res = await appFetch(cfg.portalBaseUrl, '/api/documents', { method: 'POST', cookie })
 
   if (!res.ok) {
     return {

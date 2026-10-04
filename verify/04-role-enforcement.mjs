@@ -101,7 +101,7 @@ export default async function attack4(db) {
     /* ---------------------------------------------------------------- *
      * 4.5 — read sync history. RLS sync_runs_select_admin.
      * ---------------------------------------------------------------- */
-    await applySyncAs(client, ADMIN_UID, { rows: [], matches: [] })
+    await applySyncAs(client, ADMIN_UID, { rows: [] })
 
     const r45 = await repAttempt(client, 'SELECT * FROM public.inventory_sync_runs')
     const r45control = await adminAttempt(client, 'SELECT * FROM public.inventory_sync_runs')

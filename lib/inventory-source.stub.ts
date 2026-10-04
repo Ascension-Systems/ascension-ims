@@ -7,8 +7,8 @@ import type { InventoryRow, InventorySource } from '@/lib/inventory-source'
  * The QuickBooks stub.
  *
  * It reads the current source-of-record rows and returns them unchanged. It is DELIBERATELY
- * BORING: it stands in for "QuickBooks said the same thing again", which is precisely the
- * stale-baseline condition attack 3 needs.
+ * BORING: it stands in for "QuickBooks said the same thing again", so a sync with no source
+ * movement must change nothing (the 0013 freshness rule).
  *
  * It does NOT invent drift, jitter, or random movement. A stub that changes numbers by itself
  * makes every test non-deterministic and would manufacture the appearance of a working

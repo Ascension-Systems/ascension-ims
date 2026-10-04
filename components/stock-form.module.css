@@ -1,4 +1,5 @@
-/* Step 2: the rep commitment form, inside the expanded card panel. Mobile-first. */
+/* Shared stock-form fields (on-hand / incoming / note). Used by the admin override form;
+   originally the rep commitment form's stylesheet, which was removed with 0025. Mobile-first. */
 
 .form {
   display: flex;

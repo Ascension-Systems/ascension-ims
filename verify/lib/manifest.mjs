@@ -7,7 +7,7 @@
  * Two people previously produced two different answers to "how many assertions are there",
  * and both were wrong, because the question was being answered by counting a DOCUMENT. Only
  * a minority of the ids below appear in `docs/VERIFICATION.md` in countable form: attack 2 has
- * no table at all, one call site in `03-stale-baseline.mjs` generates A FAMILY of assertions
+ * no table at all, one call site in the (since retired) `03-stale-baseline.mjs` generated A FAMILY of assertions
  * from a loop, and the single `4.12` row in the doc is several assertions in the code. No
  * amount of care fixes that by hand. An unreproducible number is not a measurement.
  *
@@ -70,69 +70,17 @@ export const MANIFEST = [
   { id: '1.11',      suite: 1, hosted: 'live',          local: 'live' },
   { id: '1.12',      suite: 1, hosted: 'static',        local: 'live' },
 
-  { id: '2a.0',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2a.1',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.2',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.3',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.4',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.5',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.6',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.7',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.8',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.9',      suite: 2, hosted: 'not-executed',  local: 'live' },
-  { id: '2a.10',     suite: 2, hosted: 'conditional',   local: 'not-executed' },
-  { id: '2b.0',      suite: 2, hosted: 'live',          local: 'absent' },
-  { id: '2b.1',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.2',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.2b',     suite: 2, hosted: 'live',          local: 'absent' },
-  { id: '2b.3',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.4',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.5',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.6',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.7',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.8',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.9',      suite: 2, hosted: 'live',          local: 'live' },
-  { id: '2b.10',     suite: 2, hosted: 'not-executed',  local: 'live' },
+  { id: '2.1',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.2',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.3',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.4',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.5',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.6',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.7',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.8',       suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.8b',      suite: 2, hosted: 'live',          local: 'live' },
+  { id: '2.9',       suite: 2, hosted: 'live',          local: 'live' },
 
-  { id: '3.0',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.1',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.1b',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.1c',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.2',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.2b',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.2c',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.2d',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.3',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.3b',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.4a',      suite: 3, hosted: 'conditional',   local: 'live' },
-  { id: '3.4',       suite: 3, hosted: 'not-executed',  local: 'live' },
-  { id: '3.4b',      suite: 3, hosted: 'not-executed',  local: 'live' },
-  { id: '3.5',       suite: 3, hosted: 'not-executed',  local: 'live' },
-  { id: '3.5b',      suite: 3, hosted: 'not-executed',  local: 'live' },
-  { id: '3.5c',      suite: 3, hosted: 'not-executed',  local: 'live' },
-  { id: '3.6a',      suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 interval', suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 age(',  suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 now() -', suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 current_date', suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 current_timestamp -', suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.6 older_than / expires / stale', suite: 3, hosted: 'static',        local: 'live' },
-  { id: '3.7',       suite: 3, hosted: 'conditional',   local: 'live' },
-  { id: '3.8',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.8b',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.8c',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.8d',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.8e',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.8f',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.9',       suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.9b',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.10',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.10b',     suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.11',      suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.11b',     suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.11c',     suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.11d',     suite: 3, hosted: 'live',          local: 'live' },
-  { id: '3.11e',     suite: 3, hosted: 'live',          local: 'live' },
 
   { id: '4.1',       suite: 4, hosted: 'live',          local: 'live' },
   { id: '4.2',       suite: 4, hosted: 'live',          local: 'live' },
@@ -222,8 +170,9 @@ export const MANIFEST = [
   { id: '5.7b',      suite: 5, hosted: 'conditional',   local: 'absent' },
 ]
 
-/** The four required attacks. Suite 5 is a regression suite and is counted separately. */
-export const ATTACK_SUITES = [1, 2, 3, 4]
+/** The required attacks (3 was retired with 0025). Suite 5 is a regression suite, counted separately. */
+// Suite 3 (stale baseline) was retired with migration 0025; 4 keeps its number.
+export const ATTACK_SUITES = [1, 2, 4]
 export const REGRESSION_SUITES = [5]
 
 export const STATES = ['live', 'conditional', 'static', 'not-executed', 'absent']

@@ -20,6 +20,10 @@ import { checkRateLimit } from '@/lib/rate-limit'
  * Rows are validated individually: one malformed line reports itself and is skipped, rather
  * than failing an otherwise good 400-row import. Quantities are optional — a file that only
  * carries names still updates names.
+ *
+ * COMMITTED IS NOT IMPORTED. Since 0025 QuickBooks (open sales orders) is the only source of
+ * committed; a "Committed" column in the file is ignored, and the database refuses the column
+ * for portal INSERT and UPDATE anyway. New lines start at committed 0 until the next sync.
  */
 
 /** Minimal RFC-4180-ish CSV parse: handles quoted fields, embedded commas and doubled quotes. */
@@ -51,7 +55,6 @@ const HEADERS: Record<string, string[]> = {
   name: ['name', 'description', 'product', 'product name', 'item name'],
   category: ['category', 'type', 'group', 'product category'],
   qty_on_hand: ['qty on hand', 'on hand', 'quantity on hand', 'qty_on_hand', 'onhand', 'qty'],
-  qty_committed: ['qty committed', 'committed', 'on sales order', 'qty_committed'],
   qty_incoming: ['qty incoming', 'incoming', 'on purchase order', 'on order', 'qty_incoming'],
 }
 
@@ -170,12 +173,10 @@ export async function POST(request: Request) {
       }
 
       const onHand = int(rec.qty_on_hand)
-      const committedQty = int(rec.qty_committed)
       const incoming = int(rec.qty_incoming)
-      if (onHand !== null || committedQty !== null || incoming !== null) {
+      if (onHand !== null || incoming !== null) {
         const invPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
         if (onHand !== null) invPatch.qty_on_hand = onHand
-        if (committedQty !== null) invPatch.qty_committed = committedQty
         if (incoming !== null) invPatch.qty_incoming = incoming
 
         // UPDATE for an existing line, INSERT only for a genuinely new one. `.upsert()` compiles

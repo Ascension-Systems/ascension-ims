@@ -1,17 +1,25 @@
 # VERIFICATION — Ascension Sales Portal (step 1)
 
-Companion to `PLAN.md`. How the four required attacks (brief lines 184–205) are executed
-against a **real database**, and what each asserts.
+Companion to `PLAN.md`. How the required attacks (brief lines 184–205) are executed against
+a **real database**, and what each asserts. The brief named four; since `0025` attack 3 is
+retired and attacks 1, 2 and 4 run (see the 3 Oct 2026 revision below).
 
 **REVISED 2026-08-19 — the verification tooling now targets the hosted project.** The
 statement this document previously opened with ("Ferb has no live database credentials and
 must not be given any") was true when written and stopped being true when the Human supplied
-a hosted Supabase project. `npm run verify` runs the four attacks against
+a hosted Supabase project. `npm run verify` runs the attacks against
 `rakslwwxduovcqnuercz` over HTTPS, using real GoTrue-issued sessions. The embedded-Postgres
 path survives as `npm run verify:local`, demoted and relabelled — §1 and §8 below.
 
 **Assertions are made against a real database, never against mocks.** A mocked RLS policy
-proves nothing; that is the whole point of these four.
+proves nothing; that is the whole point of these attacks.
+
+**REVISED 3 Oct 2026 — migration `0025`.** Reps no longer record commitments in the portal;
+"committed" is QuickBooks' quantity on open sales orders. The two attacks that exercised the
+portal commitment ledger no longer have a subject. **Attack 2 is replaced** by "QuickBooks is
+the only source of committed" (§4). **Attack 3 is retired** (§5 keeps a short record of why).
+Attack 4 and suite 5 keep their numbers, so the suites that run are 1, 2 and 4, plus
+regression suite 5.
 
 **Never print PASS for anything not actually executed.** Every assertion ends as `PASS`,
 `FAIL`, `STATIC` (a labelled migration-source check) or `NOT EXECUTED` with a printed reason.
@@ -39,9 +47,9 @@ password. No `pg` client exists anywhere on this path.
 | Channel | Used for |
 |---|---|
 | PostgREST `/rest/v1/…` | table reads, filtered writes, refusal SQLSTATEs |
-| PostgREST `/rest/v1/rpc/…` | `record_commitment`, `apply_inventory_sync` |
+| PostgREST `/rest/v1/rpc/…` | `apply_inventory_sync`; `record_commitment` only to assert it no longer exists (`2.4`) |
 | GoTrue `/auth/v1/…` | admin user creation, magic links, OTP exchange, real signed JWTs |
-| the running app over HTTP | `POST /api/commitments`, `POST /api/sync`, only when `PORTAL_BASE_URL` is set |
+| the running app over HTTP | `POST /api/documents` (session probe), `POST /api/sync`, only when `PORTAL_BASE_URL` is set |
 
 Three consequences drive the assertion classification in §3–§6:
 
@@ -52,7 +60,7 @@ Three consequences drive the assertion classification in §3–§6:
 3. **There is no rollback — every request commits.** Which is why every hosted write is
    confined to the harness-owned `KYV-` / `location = 'kyv-verify'` namespace, and
    `app_settings` is only ever written back to its own current value. No `SEA-*` row is
-   mutated and the demo delta is read-only. `verify/README.md` documents the fixtures and the
+   mutated. `verify/README.md` documents the fixtures and the
    exact teardown order.
 
 **Identity is real.** `admin.createUser` → service-role profile upsert →
@@ -65,8 +73,8 @@ of this pass.
 `NOT EXECUTED — no Supabase configuration` per affected attack and exits non-zero. A missing
 schema is a *different* verdict, `NOT EXECUTED — schema not applied`, because the two send the
 reader to different places. `verify/preflight.mjs` is read-only, creates nothing, and
-distinguishes both from `seed not applied`, `demo delta not applied, run order violated` and
-`test identities not provisioned`.
+distinguishes both from `seed not applied`, `SEA-9003 not attributed (seed 0003), run order
+violated` and `test identities not provisioned`.
 
 ### The local path — `npm run verify:local` (demoted, kept, relabelled)
 
@@ -80,8 +88,11 @@ VERIFY_DATABASE_URL=postgresql://…@127.0.0.1:5432/postgres npm run verify:loca
 
 Without the Supabase stack there is no `auth` schema, no `auth.users`, no `auth.uid()` and
 none of the three roles, so every migration would fail on the first foreign key to
-`auth.users(id)`. `verify/shim/00_auth_shim.sql` supplies the minimum and is applied **before**
-the migrations. It is **not** a migration and must never be pasted into the hosted SQL editor
+`auth.users(id)`. `verify/shim/00_auth_shim.sql` supplies the minimum — including stub
+`storage` tables for `0015`/`0023` and stub `cron.schedule`/`cron.unschedule` for `0018` — and
+is applied **before** the migrations. The embedded server has no `pg_cron`, so on the local
+path only the harness removes `0018`'s `CREATE EXTENSION … pg_cron` and says so in the run
+header. It is **not** a migration and must never be pasted into the hosted SQL editor
 — `supabase/migrations/` contains only files a Human will paste.
 
 **The Supabase-CLI / docker branch has been deleted.** There is no supabase CLI in this
@@ -133,20 +144,20 @@ person's. `npm run verify:identities` creates them; `npm run verify:identities:r
 them and everything else the harness wrote.
 
 Fixture data lives entirely in the `KYV-` / `location = 'kyv-verify'` namespace
-(`KYV-0001`…`KYV-0007`; the SKU shape is forced by `products_sku_format`, which constrains
+(`KYV-0001`…`KYV-0007`, plus `KYV-0008` created by `2.9`; the SKU shape is forced by `products_sku_format`, which constrains
 every sku to `^[A-Z]{3}-[0-9]{4}$`). `verify/README.md` carries the table of what each one is
 for, what a run writes, and the FK-ordered teardown.
 
-**`npm run verify:identities` refuses to run if the demo delta is not yet applied.** That is
-not a convenience check: `supabase/seed/0003_seed_demo_delta.sql` binds to the earliest `rep`
-profile by `created_at`, and no-ops entirely if **any** commitment row exists anywhere — its
-guard is `IF EXISTS (SELECT 1 FROM public.commitments)`, unscoped by sku or location. So the
-first commitment this harness writes, even at `location = 'kyv-verify'` on a `KYV-` sku, would
-suppress `0003` permanently. The canonical order is: **provision and sign in the real rep →
-paste `supabase/seed/0003_seed_demo_delta.sql` → only then create test identities and run the
-harness.** The detector is a positive probe for the demo-delta row itself, not a bare
-commitment count — a count alone waves through the worse state where unrelated commitments
-exist but `0003` never ran.
+**`npm run verify:identities` refuses to run until `SEA-9003` is attributed to a real
+admin.** `supabase/seed/0003_seed_demo_delta.sql` (filename historical) credits `SEA-9003`'s
+seeded override to the **earliest** admin profile by `created_at`. If the verification admin
+were created first, it would take that credit, and `SEA-9003` would lose its attribution when
+the test identities are removed (`profiles ON DELETE SET NULL`). The canonical order is:
+**provision and sign in the real admin → paste `supabase/seed/0003_seed_demo_delta.sql` → only
+then run `npm run verify:identities` and the harness.** The detector
+(`attributionVerdict` in `verify/hosted/lib/identity.mjs`) reads `SEA-9003.override_by` and
+refuses both when it is empty and when it names a test identity. Until `0025` this interlock
+probed for a demo rep commitment that `0003` created; `0003` no longer creates one.
 
 ### The local path — `verify/00-setup.sql`
 
@@ -168,8 +179,10 @@ UPDATE public.profiles SET role = 'admin'
 `example.invalid` is a reserved, non-routable TLD — these addresses cannot receive mail and
 cannot be mistaken for a real person's.
 
-The last-unit test SKU is `SEA-9006`, pinned by the seed generator with
-`qty_on_hand = 1, qty_committed = 0, qty_incoming = 0` — availability of exactly 1.
+Attack 2 uses two pinned seed fixtures: `SEA-9006` (`qty_on_hand = 1`), given a committed
+figure above its on-hand to produce a negative availability, and `SEA-9007` (40 on hand, 10
+committed), the target of a committed-figure sync. `2.8` creates a second admin identity
+(`admin2.verify@example.invalid`) so that a sync run by a different admin can be observed.
 
 ---
 
@@ -189,8 +202,10 @@ The last-unit test SKU is `SEA-9006`, pinned by the seed generator with
 An admin-session control run confirms the rows actually exist, so that a refusal is
 distinguished from an empty table.
 
-Setup: one commitment owned by the rep, one owned by the admin, both created through
-`record_commitment()` under the respective identities.
+Setup: one historical commitment row owned by the rep and one owned by the admin, inserted by
+the table owner (locally) or `service_role` (hosted). Since `0025` no client identity can write
+`commitments`, so the rows cannot be created through the client path; the table is read-only
+history, and attack 1 still proves that a rep reads only their own rows of it.
 
 | # | Attempt (as `rep`) | Expected |
 |---|---|---|
@@ -201,7 +216,7 @@ Setup: one commitment owned by the rep, one owned by the admin, both created thr
 | 1.5 | `UPDATE inventory SET qty_on_hand = 9999 WHERE sku = 'SEA-9006'` | Refused. `42501`. Follow-up read confirms `qty_on_hand` is still 1. |
 | 1.6 | `INSERT INTO inventory (...)` | Refused, `42501`. |
 | 1.7 | `DELETE FROM inventory WHERE sku = 'SEA-9006'` | Refused / 0 rows affected; follow-up read confirms the row survives. |
-| 1.8 | `INSERT INTO commitments (...)` directly, bypassing the RPC | Refused, `42501`. This is the one that would defeat attack 2 if it succeeded. |
+| 1.8 | `INSERT INTO commitments (...)` directly | Refused, `42501`. No client write path to `commitments` exists since `0025`. |
 | 1.9 | `UPDATE commitments SET state = 'retired' WHERE rep_id = auth.uid()` | Refused, `42501` (no UPDATE policy exists at all). |
 | 1.10 | `SELECT * FROM v_inventory` **as `anon`** | Refused — `permission denied for view v_inventory` (`42501`), because `0012` revokes the grant. |
 | 1.11 | `SELECT * FROM commitments` **as `anon`** | Refused, `42501`. |
@@ -213,104 +228,60 @@ for the write cases.
 
 ---
 
-## 4. Attack 2 — concurrent commitment on the last unit
+## 4. Attack 2 — QuickBooks is the only source of committed
 
-`verify/hosted/02-concurrent-last-unit.mjs` (hosted) and `verify/02-concurrent-last-unit.mjs`
+`verify/hosted/02-quickbooks-sole-source.mjs` (hosted) and `verify/02-quickbooks-sole-source.mjs`
 (local).
 
-> **Hosted:** the swarm (4b below) runs live as 20 unawaited HTTPS requests to the
-> `record_commitment` RPC on `KYV-0004` and `KYV-0005`, with a new assertion `2b.0` that
-> records send and first-response timestamps and asserts the requests genuinely overlapped,
-> and a new `2b.2b` that asserts every refusal's message. The deterministic interleaving (4a)
-> is `NOT EXECUTED` against hosted — PostgREST has one transaction per request and no
-> `pg_locks` — and runs only under `verify:local`.
->
-> **The residual gap, which must never be glossed:** the hosted swarm proves the **outcome**
-> is correctly serialised. It does not provide direct evidence of **blocking**. The honest
-> line, which the runner prints: *serialisation outcome verified against hosted; blocking
-> behaviour verified only under verify:local*.
+Replaces the original attack 2, "concurrent commitment on the last unit", retired with `0025`:
+with no portal commitment there is nothing to race. What must hold now is that the figures a
+rep reads are QuickBooks' figures, that no client can enter or alter a committed figure, and
+that an admin's correction survives a sync without stopping QuickBooks' committed from flowing
+in or being re-credited to whoever ran the sync.
 
-Two genuinely concurrent connections via `pg`, on `SEA-9006` (availability exactly 1).
+**Method.** Figures are read through `v_inventory` in a rep session and compared with an
+owner (local) or `service_role` (hosted) read of `inventory`. Syncs are applied through
+`apply_inventory_sync` as admin identities. Every forbidden action is issued directly — over SQL
+locally, at PostgREST on hosted — and asserted by its SQLSTATE or error code. Attribution is
+compared before and after a sync run by a user other than the author.
 
-### 4a. Deterministic interleaving — proves serialisation, not luck
+> **Hosted:** every assertion runs live. Writes are confined to `KYV-0004`, `KYV-0006`,
+> `KYV-0007` and `KYV-0008` at `location = 'kyv-verify'`. Two differences from the local path,
+> stated rather than hidden: `2.4` also accepts PostgREST's `PGRST202` ("function not found in
+> the schema cache"), because over this channel a dropped function is reported by PostgREST;
+> and `2.8` has only one admin session, so the override fixture is pre-attributed to the rep by
+> `service_role` and the admin runs the sync — the property is the same.
 
-```
-A: BEGIN
-A: SELECT record_commitment('SEA-9006', 1)      -- takes the FOR UPDATE row lock, inserts
-   (A does NOT commit yet)
-B: BEGIN
-B: SELECT record_commitment('SEA-9006', 1)      -- MUST BLOCK on A's row lock
-   harness waits 500ms and asserts B's promise is still unsettled   <-- the key assertion
-   harness asserts pg_locks shows B waiting on the inventory row
-A: COMMIT
-B: now proceeds, recomputes pending inside the lock (now sees A's row), and raises
-```
+| # | What is done | Expected |
+|---|---|---|
+| 2.1 | Read every row through `v_inventory` as `rep` | `qty_committed` equals `inventory.qty_committed` on every row; row counts match |
+| 2.2 | Same read, with one row's committed set above its on-hand (`SEA-9006` / `KYV-0004`: on hand 1, committed 3) | `qty_available = qty_on_hand − qty_committed` on every row; that row reads **−2**, not clamped |
+| 2.3 | Admin sync moving `SEA-9007` / `KYV-0006` to on hand 40, committed 25 | A rep then reads committed **25**, available **15** |
+| 2.4 | `record_commitment(...)` as `rep` and as `admin` | Function does not exist: `42883` (local); `PGRST202` or `42883` (hosted) |
+| 2.5 | `INSERT`, `UPDATE` and `DELETE` on `commitments` as `rep` and as `admin` | All six refused with `42501` |
+| 2.6 | `apply_inventory_sync` as admin with a non-empty `matches` array | Refused with **`KY016`** — a stale caller fails loudly |
+| 2.7 | `apply_inventory_sync` as `rep` | Refused with **`KY003`**; the row is unchanged |
+| 2.8 | Admin A corrects `SEA-9005` on hand to 50 as a manual override; admin B runs a sync reporting on hand 70, committed 30 | Row stays `manual_override` with on hand **50**; committed becomes **30**; `override_by` and `override_at` are still admin A's |
+| 2.8b | Admin B then issues an attribution-only `UPDATE … SET override_by = <B>` | Accepted, but `override_by` and `override_at` are unchanged — attribution cannot be rewritten |
+| 2.9 | Admin `INSERT INTO inventory` naming `qty_committed`, then the same insert without it | First refused with `42501` (column-scoped grant); second succeeds with committed **0** |
 
-Assertions:
-
-1. B's call **did not return** while A's transaction was open. This is the direct evidence of
-   serialisation — a naive read-then-write would have returned immediately with a success.
-2. B fails with SQLSTATE **`KY001`**, message matching `insufficient availability`.
-3. `SELECT count(*) FROM commitments WHERE sku='SEA-9006' AND state='pending'` = **exactly 1**.
-4. `SELECT qty_available FROM v_inventory WHERE sku='SEA-9006'` = **0**, never negative.
-5. Through the HTTP surface: the same losing call via `POST /api/commitments` returns
-   **409** with `{"error":"INSUFFICIENT_AVAILABILITY", …}` — asserting the route handler
-   surfaces the database refusal rather than swallowing it into a 500.
-
-### 4b. Stochastic swarm — catches what a fixed interleaving can miss
-
-Reset `SEA-9006` to `qty_on_hand = 1`, then fire a swarm of concurrent callers (`SWARM_SIZE` in
-`verify/hosted/02-concurrent-last-unit.mjs`) at `record_commitment('SEA-9006', 1)`.
-
-Assertions: exactly one call is fulfilled, every other is rejected with `KY001`, exactly one
-pending commitment row exists, and `qty_available` is 0.
-
-A third variant sets `qty_on_hand = 3` and fires the same swarm: exactly three succeed, every
-other is refused, `qty_available` is 0 — this catches an off-by-one a 1-unit test would not.
-
-**Failure of this test is a design failure, not a flake.** If it fails, the fix is in
-`record_commitment`, not in the test.
+`2.8` and `2.8b` together are the regression test for the `0025` change to
+`pin_override_attribution()`: before it, any update of an override row by a signed-in user —
+including the sync now refreshing `qty_committed` — re-stamped the attribution to that user.
 
 ---
 
-## 5. Attack 3 — delta survives a stale baseline
+## 5. Attack 3 — retired
 
-`verify/hosted/03-stale-baseline.mjs` (hosted) and `verify/03-stale-baseline.mjs` (local).
-
-> **Hosted:** the fixture is `KYV-0006` at `location = 'kyv-verify'`, same 40/10/30 shape.
-> Steps 3.4/3.5 (ageing) are `NOT EXECUTED` — they need `ALTER TABLE … DISABLE TRIGGER`, which
-> is DDL and unreachable. Step 3.6 is a **STATIC** grep of the migration source, since
-> `pg_get_functiondef` is not exposed. Steps 3.4a and 3.7 attack the immutability guard with a
-> service-role `PATCH`; if that returns `42501` rather than `KY006` the harness reports a
-> **missing grant**, not a broken trigger, because those are different findings.
->
-> **`commitments_still_pending` is project-wide, not payload-scoped**
-> (`0010_fn_apply_inventory_sync.sql:148` counts every pending commitment, unfiltered), so on
-> hosted the `3.2c` assertion is a **delta** against a count read immediately beforehand, not
-> the absolute `= 1` the local path can rely on. `commitments_confirmed`, `rows_applied` and
-> `overrides_preserved` count only the call's own work and stay absolute.
-
-This is the oversell bug the project exists to prevent.
-
-Fixture: `SEA-9007`, `qty_on_hand = 40`, `qty_committed = 10` → `qty_available` = 30.
-
-| Step | Action | Assertion |
-|---|---|---|
-| 3.1 | As rep: `record_commitment('SEA-9007', 6)` | `qty_available` drops 30 → **24**. `qty_committed_portal` = 6. Commitment state `pending`. |
-| 3.2 | Run `apply_inventory_sync` with the **same baseline** (`on_hand 40, committed 10`) and **`matches: []`** — a source that has not caught up | Commitment still **`pending`**. `qty_available` still **24**. `run.commitments_still_pending` = 1. |
-| 3.3 | Run the same sync **several more times** | Still `pending`, still 24. No accumulation of syncs retires it. |
-| 3.4 | Age the commitment: `UPDATE commitments SET created_at = now() - interval '30 days'` — via a direct owner-connection, since the trigger forbids it for clients; the harness notes it is simulating elapsed time | Still `pending`, still 24. **Elapsed time changes nothing.** |
-| 3.5 | Run the sync again after ageing | Still `pending`, still 24. |
-| 3.6 | Static assertion on the source: `apply_inventory_sync`'s body contains no `interval`, no `age(`, and no `now() -` in the retirement block | Passes. Guards against a future "helpful" cleanup being added. |
-| 3.7 | Attempt the illegal shortcut as owner: `UPDATE commitments SET state='retired' WHERE …` while `pending` | Refused, SQLSTATE **`KY006`**. Even a privileged caller cannot skip the lifecycle. |
-| 3.8 | Now sync **with a real match**: baseline `on_hand 40, committed 16` *and* `matches:[{commitment_id, sku, qty:6, location, source_ref:'SO-10241'}]` | Commitment → **`confirmed_in_source`**, `source_ref` set. `qty_committed_portal` back to 0. `qty_available` **still 24** — the figure does not move, because the source absorbed the delta in the same transaction. **No double-count, and no upward blip.** |
-| 3.9 | Mismatch case: a fresh pending commitment of qty 6, synced with `matches:[{commitment_id, qty: 5, …}]` | **Not** confirmed. Stays `pending`. Run report contains `match_fields_disagree`. |
-| 3.10 | Unknown-commitment case: `matches:[{commitment_id:'<random uuid>'}]` | Run report contains `unknown_commitment`. No commitment altered. |
-| 3.11 | Override preservation: sync a row whose `source = 'manual_override'` | Quantities unchanged; `source_payload.last_source_snapshot` populated; `run.overrides_preserved` = 1. Show both numbers, never silently override. |
-
-Step 3.8 is the one most likely to be got subtly wrong, and it is where an implementation that
-looks right fails: if the baseline update and the state change were in separate transactions,
-`qty_available` would briefly read 30 between them.
+**Attack 3, "delta survives a stale baseline", is retired with migration `0025`.** It proved that
+a pending portal commitment kept reducing availability across any number of syncs that did not
+mention it, and that it was retired only by an explicit match, never by elapsed time. Since `0025`
+the portal records no commitments, `apply_inventory_sync` no longer processes matches, and no
+pending row affects any figure, so the property it protected no longer exists. The files
+(`verify/03-stale-baseline.mjs`, `verify/hosted/03-stale-baseline.mjs`) are deleted and its ids
+are gone from `verify/lib/manifest.mjs`. The number is not reused: attack 4 and suite 5 keep
+theirs, so existing references stay valid. The lifecycle trigger on `commitments` it also
+exercised is still installed; with client writes revoked it guards history only.
 
 ---
 
@@ -327,7 +298,8 @@ looks right fails: if the baseline update and the state change were in separate 
 > disposition block in §8. Writes target `KYV-0001` and `KYV-0002`, never `SEA-9007`.
 >
 > **4.12b** reads `inventory_authority` and writes **that same value** back, asserting 1 row
-> affected. `app_settings` is a singleton with no disposable copy, and over PostgREST the
+> affected. (Since `0025` the app no longer reads this column, but it remains a column of
+> `app_settings` and an equally good target for the update policy.) `app_settings` is a singleton with no disposable copy, and over PostgREST the
 > original `SET inventory_authority = 'portal'` would commit and flip the live portal's
 > authority mode. The affected-row count is 1 either way, so the policy is proven exactly as
 > strongly; the `WHERE` clause stays identical to 4.4's, which is the evidential point.
@@ -396,7 +368,8 @@ the hosted path, printed as one, and never counted as a live pass.
 | Read sync history | RLS `sync_runs_select_admin` (database) |
 | Run an inventory sync | `is_admin()` guard inside `apply_inventory_sync` (`SECURITY DEFINER` function) **and** a `requireAdmin()` guard in `app/api/sync/route.ts`. Two layers; the database one is authoritative. |
 | Change a user's role | RLS `profiles_update_admin` (database) |
-| Write a commitment row directly | No policy exists for anyone (database) |
+| Write a commitment row directly | No policy exists for anyone, and since `0025` no privilege for `anon` or `authenticated` (database) |
+| Enter a committed figure | Not writable by any client: `qty_committed` is outside the column-scoped `INSERT` and `UPDATE` grants; only `apply_inventory_sync` sets it (database) |
 
 The route-handler guards exist to return a clean 403 instead of a 500. They are **not** the
 access control. Every one of them has a database-level refusal underneath it, and attacks 4.1
@@ -408,9 +381,9 @@ through 4.8 bypass the route handlers entirely to prove it.
 
 `verify/hosted/05-login-failure-modes.mjs`, plus `verify/login-predicate.mjs` and
 `verify/login-failure.mjs` as smaller entry points. The brief requires four attacks and §3–§6
-are those four; this suite is printed after them, counted separately in the disposition block
-below, and is never called an attack — the same way `check:secrets` is explicitly not one of
-the four.
+cover them (attack 3 retired since `0025`, §5); this suite is printed after them, counted
+separately in the disposition block below, and is never called an attack — the same way
+`check:secrets` is explicitly not one of the attacks.
 
 **The defect it exists to catch.** `requestMagicLink()` logged every error class and then
 redirected to `/login/check-email` regardless. With a wrong or rotated anon key, or during a
@@ -448,7 +421,7 @@ is answered `/login/check-email`, the two responses stop being indistinguishable
 **That is why 5.4 is blocking, and the chain is not a matter of anyone's care.** Each `5.4`
 comparison is a `report.check`; a `check` whose condition does not hold calls `fail()`, which
 records `STATUS.FAIL`; any `FAIL` makes that report's `ok` false; `run-all.mjs` folds the
-regression suite into `anyFailed` alongside the four attacks and exits non-zero on it. There is
+regression suite into `anyFailed` alongside the attacks and exits non-zero on it. There is
 no warning tier for 5.4 to land in. It is also why the comparison is now structurally unable to
 report `NOT EXECUTED` once both responses are in hand: `resolveEquivalenceInputs` owns every
 precondition and never sees the report, and `assertEquivalence` is handed a verdict-only view
@@ -629,7 +602,7 @@ vacuously.
 ## 8. Output contract
 
 `npm run verify` prints, in order: a banner naming the channel; a **booleans-only**
-configuration block; a read-only preflight; each of the four attacks; suite 5, labelled
+configuration block; a read-only preflight; attacks 1, 2 and 4; suite 5, labelled
 `SUITE` and not `ATTACK`; a summary; the manifest-drift result; and the disposition block.
 
 The configuration block is `set` / `unset` and the project ref, and nothing else. **Never a
@@ -650,16 +623,13 @@ CONFIGURATION
 Per attack:
 
 ```
-ATTACK 2 — Concurrent commitment on the last unit
+ATTACK 2 — QuickBooks is the only source of committed
   Target:  hosted Supabase project rakslwwxduovcqnuercz (PostgREST + GoTrue over HTTPS)
-  Method: unawaited HTTPS requests to the record_commitment RPC …
-  2a.0 KYV-0004 starts with availability of exactly 1 ........ PASS
-  2a.2 B is still blocked 500ms later while A holds the lock ... NOT EXECUTED
-       ↳ PostgREST has no open transactions — …  Runs under `npm run verify:local`.
-  2b.1 swarm on 1 unit: exactly 1 succeeds ….. PASS
+  Method: figures are read through v_inventory with the rep session …
+  2.1  rep v_inventory.qty_committed equals inventory.qty_committed … PASS
+  2.4  record_commitment does not exist for rep or admin … PASS
+  2.6  apply_inventory_sync with a non-empty matches array is refused (KY016) … PASS
   RESULT: PASS (…counts…)
-  NOTE:   Serialisation outcome verified against hosted; blocking behaviour verified only
-          under verify:local.
 ```
 
 The `RESULT:` line above is an **illustration of the shape, not of any run**. The real figures
@@ -689,10 +659,11 @@ Three artefacts locked to each other in both directions:
 - **`npm run check:disposition`** regenerates the block below in memory and exits non-zero if
   the committed copy differs. `npm run verify:disposition -- --write` rewrites it.
 
-Why it is computed rather than counted: only a minority of these ids appear in this document in
-countable form at all. Attack 2 has no table, one call site in `03-stale-baseline.mjs` emits a
-family of assertions from a loop, and the single `4.12` row in §6 is several assertions in the
-code. A number describing generated output has to be generated.
+Why it is computed rather than counted: not every id appears in this document in countable
+form — the single `4.12` row in §6 is several assertions in the code, and suite 5's `5.1.x`
+family is generated from a table — and the inventory changes when suites do, as it did when
+`0025` replaced attack 2 and retired attack 3. A number describing generated output has to be
+generated.
 
 <!-- DISPOSITION:BEGIN — generated by `npm run verify:disposition`. Do not edit by hand. -->
 
@@ -701,30 +672,29 @@ ASSERTION DISPOSITION — computed from verify/lib/manifest.mjs by
 verify/lib/disposition.mjs. Nothing here is hand-counted, and no count of anything
 the code can count appears in the prose of docs/VERIFICATION.md.
 
-  THE FOUR REQUIRED ATTACKS (suites 1-4)
+  THE REQUIRED ATTACKS (suites 1, 2, 4)
 
-    Total distinct assertion ids .................................. 98
-    Executable remotely  (npm run verify) ......................... 73
-      of which conditional on a precondition ...................... 6
-    STATIC — asserts the migration source, not deployed ........... 9
-    NOT EXECUTED on the hosted path ............................... 16
+    Total distinct assertion ids .................................. 46
+    Executable remotely  (npm run verify) ......................... 43
+      of which conditional on a precondition ...................... 3
+    STATIC — asserts the migration source, not deployed ........... 2
+    NOT EXECUTED on the hosted path ............................... 1
 
-    Executes live ONLY under npm run verify:local ................. 24
-    Executes live ONLY under npm run verify ....................... 5
-    Executes live on BOTH paths ................................... 68
+    Executes live ONLY under npm run verify:local ................. 2
+    Executes live ONLY under npm run verify ....................... 2
+    Executes live on BOTH paths ................................... 41
     Executes live on NEITHER path ................................. 1
 
-    68 + 24 + 5 + 1 = 98 (declared total 98)
+    41 + 2 + 2 + 1 = 46 (declared total 46)
 
     Remote-only :
-      2a.10, 2b.0, 2b.2b, 4.9, 4.10
+      4.9, 4.10
     Neither     :
       4.10b
 
     Per suite (hosted / local, executable live or conditional):
       suite 1: 17 ids — hosted 16 executable, 1 STATIC, 0 NOT EXECUTED | local 17 executable
-      suite 2: 23 ids — hosted 13 executable, 0 STATIC, 10 NOT EXECUTED | local 20 executable, 2 absent
-      suite 3: 39 ids — hosted 27 executable, 7 STATIC, 5 NOT EXECUTED | local 39 executable
+      suite 2: 10 ids — hosted 10 executable, 0 STATIC, 0 NOT EXECUTED | local 10 executable
       suite 4: 19 ids — hosted 17 executable, 1 STATIC, 1 NOT EXECUTED | local 16 executable, 1 absent
 
   REGRESSION SUITE 5 — magic-link request failure modes
@@ -779,7 +749,7 @@ configuration, an unreachable endpoint, an unapplied schema, an unapplied seed, 
 order or absent test identities each abort the run with their own verdict string and a
 non-zero exit.
 
-`scripts/check-no-secrets.sh` runs separately and is **not** one of the four attacks: it greps
+`scripts/check-no-secrets.sh` runs separately and is **not** one of the attacks: it greps
 the repo for key-shaped strings (`eyJ`-prefixed JWTs, `sb[a-z]*_`-prefixed keys, credential
 assignments), for a service-role key exposed via a `NEXT_PUBLIC_` prefix, and for any
 environment value reaching stdout. Its dotenv scan is **git-aware**: it fails on a dotenv file
@@ -811,19 +781,21 @@ previous revision.
   in.
 - **The hosted project's actual RLS state — NO LONGER ON THIS LIST.** It was unverifiable when
   the harness could only reach a local database. It becomes verifiable the moment the Human
-  applies migrations 0001–0012 and runs `npm run verify`, which is what this tooling now
+  applies migrations `0001`–`0025` and runs `npm run verify`, which is what this tooling now
   exists to do. Until they are applied, the preflight reports
   `NOT EXECUTED — schema not applied` rather than claiming anything.
 - **Raw-SQL, open-transaction and `pg_catalog` assertions against hosted.** PostgREST gives one
-  transaction per request and no catalog access, so `2a.1`–`2a.9`, `2b.10`, and the ageing
-  assertions `3.4`, `3.4b`, `3.5`, `3.5b`, `3.5c` (which need `ALTER TABLE … DISABLE TRIGGER`)
-  are reported `NOT EXECUTED` with the reason. They all run under `npm run verify:local`.
+  transaction per request and no catalog access. Since `0025` replaced attack 2 and retired
+  attack 3, no remaining assertion needs an open transaction; the ones that needed it (the
+  deterministic last-unit interleaving and the commitment-ageing steps) went with those suites.
 - **Deployed function and view bodies.** `pg_get_functiondef` and `pg_class` are not exposed
-  over PostgREST, so `1.12` and the `3.6` family are `STATIC` checks of the migration source.
-  `verify:local` inspects a deployed object — but a locally deployed one.
-- **Blocking, as distinct from serialisation.** The hosted swarm proves exactly one caller
-  wins; it cannot show a caller *waiting*. Preserved under `verify:local` and printed as a
-  caveat, never glossed.
+  over PostgREST, so `1.12` is a `STATIC` check of the migration source (and `4.13` is `STATIC`
+  on hosted for the privilege reason in §6). `verify:local` inspects a deployed object — but a
+  locally deployed one.
+- **Stock promised before a QuickBooks sales order exists.** Not a verification gap but a
+  product limit, recorded here so it is not mistaken for one: since `0025` such stock is not
+  shown as committed, by decision (`QUESTIONS-FOR-LEVON.md` item 3). No test can make the
+  portal know about a sale QuickBooks has not been told about.
 - **JWT signing and verification under `verify:local`.** That path sets the claims GUC
   directly. It is now covered against hosted, which is the point of this revision.
 - **Netlify deployment and the public URL.** Deploy is a push, and pushing is a Human action.

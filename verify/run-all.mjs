@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `npm run verify` — the four required attacks against the CONFIGURED HOSTED SUPABASE
+ * `npm run verify` — the required attacks (1, 2, 4) against the CONFIGURED HOSTED SUPABASE
  * PROJECT, over HTTPS, using real GoTrue-issued sessions.
  *
  * ------------------------------------------------------------------------------------
@@ -30,8 +30,7 @@ import { probeAppSession } from './hosted/lib/app-probe.mjs'
 import { resetFixtures, teardownFixtures, ARTEFACT_DISCLOSURE } from './hosted/lib/fixtures.mjs'
 import { runPreflight, VERDICTS } from './preflight.mjs'
 import attack1 from './hosted/01-rls-bypass.mjs'
-import attack2 from './hosted/02-concurrent-last-unit.mjs'
-import attack3 from './hosted/03-stale-baseline.mjs'
+import attack2 from './hosted/02-quickbooks-sole-source.mjs'
 import attack4 from './hosted/04-role-enforcement.mjs'
 import suite5, { SUITE_TITLE as SUITE5_TITLE } from './hosted/05-login-failure-modes.mjs'
 import { MANIFEST } from './lib/manifest.mjs'
@@ -47,8 +46,7 @@ import {
 
 const ATTACKS = [
   [1, 'RLS bypass', attack1],
-  [2, 'Concurrent commitment on the last unit', attack2],
-  [3, 'Delta survives a stale baseline', attack3],
+  [2, 'QuickBooks is the only source of committed', attack2],
   [4, 'Role enforcement is server-side', attack4],
 ]
 
@@ -73,7 +71,7 @@ const RLS_SEMANTICS_NOTE = `
   working policy from a blanket denial.`
 
 const LOCAL_SUGGESTION = `
-  SEPARATELY, AND NOT AS A FALLBACK: \`npm run verify:local\` runs the same four attacks
+  SEPARATELY, AND NOT AS A FALLBACK: \`npm run verify:local\` runs the same attack suites
   against an ephemeral local PostgreSQL server. It exercises POLICY LOGIC ONLY — it does not
   cover identity issuance, JWT signing, JWT verification, PostgREST request handling or
   session handling, and a pass there is never a claim about the hosted project. It is the
@@ -86,7 +84,7 @@ function banner(cfg, extra = []) {
     [
       '',
       '='.repeat(78),
-      'VERIFICATION HARNESS (HOSTED) — the four required attacks',
+      'VERIFICATION HARNESS (HOSTED) — the required attacks (1, 2, 4)',
       '='.repeat(78),
       'Target        : the configured hosted Supabase project, over HTTPS.',
       'Channel       : PostgREST /rest/v1 + /rest/v1/rpc, GoTrue /auth/v1. No database',
@@ -151,8 +149,8 @@ function summarise(
   reports,
   { aborted = null, abortDetail = null, extraNotes = [], regression = null } = {},
 ) {
-  // The four attacks are totalled as the four attacks. Suite 5 is reported separately and is
-  // never folded into that figure, so "the four attacks" keeps its meaning.
+  // The attack suites are totalled together. Suite 5 is reported separately and is
+  // never folded into that figure.
   const totalExecuted = reports.reduce((n, r) => n + r.executed, 0)
   const totalPassed = reports.reduce((n, r) => n + r.passed, 0)
   const totalFailed = reports.reduce((n, r) => n + r.failed, 0)
@@ -179,7 +177,7 @@ function summarise(
       '',
       ...(regression
         ? [
-            '  SEPARATELY — not one of the four required attacks:',
+            '  SEPARATELY — not one of the required attacks:',
             line('Suite ', regression),
             '',
           ]
@@ -326,7 +324,7 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------- *
-   * 4. The four attacks.
+   * 4. The attack suites (1, 2, 4).
    * ---------------------------------------------------------------- */
   const ctx = {
     cfg,

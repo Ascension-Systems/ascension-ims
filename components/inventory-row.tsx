@@ -5,11 +5,10 @@ import { StatusBadge } from '@/components/status-badge'
 import { StaleBadge } from '@/components/stale-badge'
 import { RelativeTime } from '@/components/relative-time'
 import { ChevronGlyph } from '@/components/icons'
-import { CommitForm } from '@/components/commit-form'
 import { AdminOverrideForm } from '@/components/admin-override-form'
 import { rowStatus, sourceLabel } from '@/lib/status'
 import { formatDateOnly, formatEta, formatRelativeAge } from '@/lib/relative-time'
-import type { AppRole, InventoryAuthority, InventoryViewRow } from '@/lib/types'
+import type { AppRole, InventoryViewRow } from '@/lib/types'
 import styles from './inventory-row.module.css'
 
 /**
@@ -22,7 +21,6 @@ import styles from './inventory-row.module.css'
 
 export function InventoryRow({
   row,
-  authority,
   stale,
   serverNow,
   expanded,
@@ -31,7 +29,6 @@ export function InventoryRow({
   viewerRole,
 }: {
   row: InventoryViewRow
-  authority: InventoryAuthority
   stale: boolean
   serverNow: number
   expanded: boolean
@@ -80,7 +77,7 @@ export function InventoryRow({
           <span className={styles.sku}>{row.sku}</span>
         </span>
 
-        <AvailabilityBlock row={row} authority={authority} encoding={encoding} />
+        <AvailabilityBlock row={row} encoding={encoding} />
 
         <ChevronGlyph className={styles.chevron} expanded={expanded} />
       </button>
@@ -97,13 +94,13 @@ export function InventoryRow({
           them. They now render inside the panel; nothing was lost, only de-duplicated. */}
       {/* The panel WRAPPER always renders so aria-controls always resolves to a real element.
           Its CONTENTS render only when open. Previously the whole panel -- a full <dl>, a
-          CommitForm, and for admins an AdminOverrideForm -- was emitted for all 97 rows and
+          and for admins an AdminOverrideForm -- was emitted for all 97 rows and
           merely hidden with `hidden`, which hides pixels, not bytes: the inventory document was
           435 KB on the deployed site. Collapsed rows now cost their summary only. */}
       <div id={panelId} className={styles.panel} hidden={!expanded}>
         {expanded ? (
           <>
-          <AvailabilityLines row={row} authority={authority} />
+          <AvailabilityLines row={row} />
 
           <p className={styles.meta}>
             {/* Source attribution is a trust feature: a rep seeing whether a number came from
@@ -128,19 +125,11 @@ export function InventoryRow({
               <dd>{row.qty_on_hand}</dd>
             </div>
             <div className={styles.detailRow}>
-              <dt>Committed (QuickBooks)</dt>
-              <dd>{row.qty_committed_source}</dd>
+              <dt>Committed (QuickBooks sales orders)</dt>
+              <dd>{row.qty_committed}</dd>
             </div>
             <div className={styles.detailRow}>
-              <dt>Committed by reps</dt>
-              <dd>{row.qty_committed_portal}</dd>
-            </div>
-            <div className={styles.detailRow}>
-              <dt>Available (QuickBooks)</dt>
-              <dd>{row.qty_available_source}</dd>
-            </div>
-            <div className={styles.detailRow}>
-              <dt>Available (incl. rep commitments)</dt>
+              <dt>Available</dt>
               <dd>{row.qty_available}</dd>
             </div>
             <div className={styles.detailRow}>
@@ -197,18 +186,6 @@ export function InventoryRow({
               View on plantationprestige.com ↗
             </a>
           ) : null}
-
-          {/* Step 2 — recording a commitment. Available to every provisioned account: the
-              database permits any authenticated identity with a profiles row (record_commitment
-              takes no rep_id and reads auth.uid()), and an admin selling stock is a real case.
-              Rendered only inside the expanded panel so the list stays scannable. */}
-          <CommitForm
-            sku={row.sku}
-            location={row.location}
-            available={row.qty_available}
-            committedPortal={row.qty_committed_portal}
-            uom={row.uom}
-          />
 
           {/* Step 3 — admin correction. HIDING THIS IS NOT THE ACCESS CONTROL: RLS policy
               inventory_update_admin refuses a rep's UPDATE at the database, and attack 4 proves

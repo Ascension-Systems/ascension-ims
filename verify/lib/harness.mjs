@@ -398,33 +398,20 @@ export async function inventoryRow(client, sku) {
   return rows[0]
 }
 
-export async function pendingCount(client, sku) {
+/**
+ * Seeds one HISTORICAL commitment row as the table owner. Since 0025 the portal has no write
+ * path to `commitments` (record_commitment is dropped, write privileges revoked); the table is
+ * read-only history. Attack 1 still needs one rep-owned and one admin-owned row to prove the
+ * read-isolation policy, so they are inserted here, outside any client identity.
+ */
+export async function seedHistoricalCommitment(client, uid, sku, qty, note = null) {
   const { rows } = await client.query(
-    `SELECT count(*)::int AS n FROM public.commitments
-      WHERE sku = $1 AND location = 'default' AND state = 'pending'`,
-    [sku],
+    `INSERT INTO public.commitments (sku, location, qty, rep_id, state, note)
+     VALUES ($1, 'default', $2, $3, 'pending', $4)
+     RETURNING *`,
+    [sku, qty, uid, note],
   )
-  return rows[0].n
-}
-
-/** Records a commitment as an identity, committing it. Returns { ok, row | code, message }. */
-export async function recordCommitmentAs(client, uid, sku, qty, note = null) {
-  await beginAs(client, 'authenticated', uid)
-  try {
-    const { rows } = await client.query(
-      'SELECT * FROM public.record_commitment($1, $2, $3, $4) AS c',
-      [sku, qty, 'default', note],
-    )
-    await client.query('COMMIT')
-    return { ok: true, row: rows[0] }
-  } catch (err) {
-    try {
-      await client.query('ROLLBACK')
-    } catch {
-      /* ignore */
-    }
-    return { ok: false, code: err.code ?? null, message: err.message }
-  }
+  return rows[0]
 }
 
 /** Runs apply_inventory_sync as an identity, committing it. */

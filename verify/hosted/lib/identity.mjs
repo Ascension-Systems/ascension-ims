@@ -163,120 +163,67 @@ export async function provisionIdentities(cfg, identities) {
 }
 
 /* ==================================================================== *
- * The demo-delta interlock (run-order violation detector)
+ * The run-order interlock: SEA-9003 must already be attributed to a real admin
  * ==================================================================== */
 
-export const DEMO_DELTA_NOTE = 'Demo delta: recorded in portal, not yet in QuickBooks'
+/*
+ * Since 0025 the portal records no commitments, so the old "demo delta" probe is gone. One
+ * run-order hazard remains: supabase/seed/0003_seed_demo_delta.sql credits SEA-9003's seeded
+ * manual override to the EARLIEST admin profile. If the verification admin were created first
+ * it would be credited, and removing it afterwards (profiles ON DELETE SET NULL) would leave
+ * the demo showing an unattributed override. So test identities may be created only once
+ * SEA-9003 carries an override_by that is not a verification identity.
+ *
+ * A POSITIVE probe and a plain read: it creates nothing and is safe to run at any point.
+ */
 
 export const VERDICT = {
   PROCEED: 'PROCEED',
-  NO_DELTA_NO_COMMITMENTS: 'NO_DELTA_NO_COMMITMENTS',
-  NO_DELTA_BUT_COMMITMENTS: 'NO_DELTA_BUT_COMMITMENTS',
-  NO_REP_PROFILE: 'NO_REP_PROFILE',
+  NOT_ATTRIBUTED: 'NOT_ATTRIBUTED',
+  ATTRIBUTED_TO_TEST_IDENTITY: 'ATTRIBUTED_TO_TEST_IDENTITY',
   UNREADABLE: 'UNREADABLE',
 }
 
-/**
- * A POSITIVE PROBE, not a bare commitment count.
- *
- * A count alone waves through the worse state — unrelated commitments exist but
- * `supabase/seed/0003_seed_demo_delta.sql` never ran — because both look like "commitments
- * exist". The probe names the demo delta row by every identifying field instead.
- *
- * Three hazards, one predicate:
- *
- *   H1  a test rep becomes the EARLIEST rep profile, so 0003 binds the demo delta to an
- *       artefact Finisher must delete — and commitments.rep_id is ON DELETE RESTRICT, so
- *       that deletion is then blocked.
- *   H2  (dominant, and unconditional) 0003's guard is
- *       `IF EXISTS (SELECT 1 FROM public.commitments)` — NOT scoped by sku or location. The
- *       moment this harness writes its first commitment, even at location 'kyv-verify' on a
- *       KYV- sku, 0003 no-ops permanently and the demo delta can never be produced without
- *       someone manually deleting rows.
- *   H3  a test admin becomes the earliest admin, so it becomes SEA-9003's override_by;
- *       deleting it sets that column NULL (ON DELETE SET NULL) and the demo shows an
- *       unattributed override.
- *
- * The probe itself is a plain read. It creates nothing and is safe to run at any point.
- */
-export async function demoDeltaVerdict(cfg, identities) {
+export async function attributionVerdict(cfg, identities) {
   const svc = identities.service
-
-  const delta = await selectRows(
-    cfg,
-    svc,
-    'commitments',
-    'select=id,rep_id,qty,state' +
-      '&sku=eq.SEA-9007&location=eq.default&qty=eq.6&state=eq.pending' +
-      `&note=eq.${encodeURIComponent(DEMO_DELTA_NOTE)}`,
-  )
-  if (!delta.ok) {
-    return { verdict: VERDICT.UNREADABLE, detail: `${delta.code}: ${delta.message}`, probe: delta }
+  const row = await selectRows(cfg, svc, 'inventory', 'select=override_by&sku=eq.SEA-9003&location=eq.default')
+  if (!row.ok) {
+    return { verdict: VERDICT.UNREADABLE, detail: `${row.code}: ${row.message}` }
   }
-  if (delta.rows.length > 0) {
-    return { verdict: VERDICT.PROCEED, detail: 'the demo delta row is present', row: delta.rows[0] }
+  const by = row.rows[0]?.override_by ?? null
+  if (!by) {
+    return { verdict: VERDICT.NOT_ATTRIBUTED, detail: 'SEA-9003 has no override_by' }
   }
-
-  const all = await countRows(cfg, svc, 'commitments')
-  const reps = await countRows(cfg, svc, 'profiles', 'role=eq.rep')
-
-  if (reps.ok && reps.count === 0) {
-    return { verdict: VERDICT.NO_REP_PROFILE, detail: 'no rep profile exists', anyCommit: all.count }
+  const owner = await selectRows(cfg, svc, 'profiles', `select=email&id=eq.${encodeURIComponent(by)}`)
+  const email = owner.ok ? (owner.rows[0]?.email ?? null) : null
+  if (email && TEST_EMAILS.includes(email)) {
+    return { verdict: VERDICT.ATTRIBUTED_TO_TEST_IDENTITY, detail: `SEA-9003 is credited to ${email}` }
   }
-  if (all.ok && all.count > 0) {
-    return {
-      verdict: VERDICT.NO_DELTA_BUT_COMMITMENTS,
-      detail: `${all.count} commitment row(s) exist but the demo delta row does not`,
-      anyCommit: all.count,
-    }
-  }
-  return {
-    verdict: VERDICT.NO_DELTA_NO_COMMITMENTS,
-    detail: 'no commitments at all; 0003 has not been applied',
-    anyCommit: all.count ?? 0,
-  }
+  return { verdict: VERDICT.PROCEED, detail: 'SEA-9003 is credited to a real admin' }
 }
 
 /** The refusal text for each verdict. Actionable, and specific about which state it saw. */
 export function verdictMessage(v) {
   switch (v.verdict) {
     case VERDICT.PROCEED:
-      return 'The demo delta is in place. 0003 has already run and bound to a real rep, so H1, H2 and H3 are all closed.'
-    case VERDICT.NO_REP_PROFILE:
+      return 'SEA-9003 is attributed to a real admin; test identities cannot take its credit.'
+    case VERDICT.NOT_ATTRIBUTED:
       return [
-        'REFUSED: no rep profile exists — nobody has signed in yet.',
+        'REFUSED: SEA-9003 has not been attributed yet.',
         '',
-        'supabase/seed/0003_seed_demo_delta.sql binds the demo delta to the EARLIEST rep',
-        'profile by created_at. Creating test identities now risks binding the demo to an',
-        'artefact that gets deleted afterwards.',
+        'supabase/seed/0003_seed_demo_delta.sql credits it to the EARLIEST admin profile.',
+        'Creating the verification admin now could make it that admin.',
         '',
-        'Provision the real rep in the Supabase dashboard, have them sign in, paste',
-        'supabase/seed/0003_seed_demo_delta.sql, then re-run this command. See README.md,',
-        '"Running this against the hosted Supabase project", steps 4 to 7.',
-      ].join('\n')
-    case VERDICT.NO_DELTA_NO_COMMITMENTS:
-      return [
-        'REFUSED: the demo delta has not been applied.',
-        '',
-        'Creating test identities now risks binding it to a test artefact, and the first',
-        'commitment this harness writes would make supabase/seed/0003_seed_demo_delta.sql',
-        'no-op permanently — its guard is IF EXISTS (SELECT 1 FROM public.commitments),',
-        'which is not scoped by sku or location.',
-        '',
-        'Provision and sign in the real rep, paste supabase/seed/0003_seed_demo_delta.sql,',
+        'Provision the real admin, have them sign in, paste supabase/seed/0003_seed_demo_delta.sql,',
         'then re-run. See README.md, "Running this against the hosted Supabase project".',
       ].join('\n')
-    case VERDICT.NO_DELTA_BUT_COMMITMENTS:
+    case VERDICT.ATTRIBUTED_TO_TEST_IDENTITY:
       return [
-        'REFUSED: commitment rows exist but the demo delta row does not.',
+        `REFUSED: ${v.detail}.`,
         '',
-        `Observed: ${v.detail}.`,
-        '',
-        'supabase/seed/0003_seed_demo_delta.sql will now no-op forever and cannot produce the',
-        'demo delta. This needs a human decision — delete the offending commitments, or accept',
-        'the demo without the delta. It is not a condition this script may resolve on its own.',
+        'This needs a human decision: re-attribute SEA-9003 to the real admin before continuing.',
       ].join('\n')
     default:
-      return `REFUSED: could not read the commitments table to check the demo delta (${v.detail}).`
+      return `REFUSED: could not read SEA-9003 to check attribution (${v.detail}).`
   }
 }

@@ -9,7 +9,7 @@
  * DATABASE_URL, and no `pg` client anywhere on this path. The entire surface is:
  *
  *   PostgREST  /rest/v1/...       table reads, filtered writes, refusal SQLSTATEs
- *   PostgREST  /rest/v1/rpc/...   record_commitment, apply_inventory_sync
+ *   PostgREST  /rest/v1/rpc/...   apply_inventory_sync
  *   GoTrue     /auth/v1/...       admin user creation, magic links, OTP exchange, real JWTs
  *   the app    over plain HTTP    only when PORTAL_BASE_URL is set
  *

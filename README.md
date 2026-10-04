@@ -7,6 +7,12 @@ searchable, filterable inventory list showing **on hand**, **committed**, **avai
 **The number a rep acts on is `available`, not `on hand`.** Showing on-hand alone is what
 causes selling stock that is already spoken for — the bug this project exists to prevent.
 
+**Committed comes from QuickBooks, and only from QuickBooks** (decision of 3 Oct 2026, migration
+`0025`): it is the quantity on open sales orders in QuickBooks Desktop. Reps do not record
+commitments in the portal. Available = on hand − committed in QuickBooks. Stock promised before
+a sales order is entered in QuickBooks is therefore not shown as committed; the client enters
+sales orders promptly (`docs/QUESTIONS-FOR-LEVON.md` item 3).
+
 QuickBooks is not accessible yet. It is stubbed behind a single adapter module so the only
 thing that changes at cutover is *who writes the inventory rows*.
 
@@ -21,8 +27,7 @@ demoable artifact — sign in, see the list, search and filter it.
 
 | | Status |
 |---|---|
-| Rep commitment-recording screen (step 2) | approved in principle, held |
-| Admin inventory editing, overrides, reconciliation view (step 3) | approved in principle, held |
+| Rep commitment recording in the portal | dropped 3 Oct 2026 — committed comes from QuickBooks sales orders (`0025`) |
 | Promotions, document library, notification centre | approved in principle, later |
 | Real Web Push (service worker push, VAPID, permission prompt) | out of scope |
 | QuickBooks / Rightworks / Conductor integration | no client access yet — stubbed |
@@ -32,12 +37,11 @@ demoable artifact — sign in, see the list, search and filter it.
 There are no "coming soon" placeholders anywhere. If a user cannot do it here, the interface
 does not mention it.
 
-**One deliberate carve-out.** The commitments **data layer** ships in full — the table, the
-`pending → confirmed_in_source → retired` lifecycle, its trigger, its RLS, the
-concurrency-controlled `record_commitment` function and `apply_inventory_sync`. Its **UI does
-not**. The operation is reachable server-side only, which is how the two ledger-related
-verification requirements are attacked. The inventory view *does* display `committed` and the
-show-both-numbers presentation, because that is step 1's centrepiece.
+**The `commitments` table is retained as read-only history since `0025`.** Earlier builds
+shipped a portal commitment ledger (`record_commitment`, a pending → confirmed → retired
+lifecycle, a delta subtracted from availability). `0025` dropped the write path and the delta;
+the table and its rows remain, readable own-only by reps and in full by admins, and no client
+can write to it. `apply_inventory_sync` is the only path that sets `qty_committed`.
 
 ---
 
@@ -89,9 +93,9 @@ Without it the login form fails closed with the "cannot send" page — deliberat
 | `npm run check:secrets` | repo hygiene: nothing key- or credential-shaped is checked in |
 | `npm run verify:preflight` | read-only check of what the hosted project is missing. Creates nothing |
 | `npm run verify:identities` | creates the two test identities on the hosted project |
-| `npm run verify` | **the four verification attacks, against the configured hosted project** |
+| `npm run verify` | **the verification attacks (1, 2, 4) and suite 5, against the configured hosted project** |
 | `npm run verify:identities:remove` | removes every artefact the harness created |
-| `npm run verify:local` | the four attacks against an ephemeral local Postgres — **policy logic only** |
+| `npm run verify:local` | attacks 1, 2 and 4 against an ephemeral local Postgres — **policy logic only** |
 | `npm run verify:login-predicate` | the magic-link error-classification table (5.1), on its own. No network, no credentials, no database |
 | `npm run verify:login-failure` | boots a second app instance with a **deliberately invalid anon key** and asserts the user is told the truth (5.5). See below |
 | `npm run verify:disposition` | prints the generated assertion-disposition block. `-- --write` rewrites it in `docs/VERIFICATION.md` |
@@ -205,15 +209,18 @@ has stopped reaching something, and a smaller number is not a better result.
 ## Running this against the hosted Supabase project
 
 Nothing in this repository has ever been applied to the hosted project. Everything below is
-manual and in this order. Deviating from the order produces a demo without its centrepiece —
-see step 7.
+manual and in this order. Deviating from the order leaves the seeded override on `SEA-9003`
+credited to the wrong person — see step 7.
 
 **Project ref:** `rakslwwxduovcqnuercz`.
 
-### Step 1 — apply the 12 migrations
+### Step 1 — apply all migrations, `0001` to `0025`
 
-Supabase dashboard → **SQL Editor**. Paste each file's full contents and run it, in this
-order. Do not skip, do not reorder, do not batch.
+Supabase dashboard → **SQL Editor**. Paste each file's full contents and run it, in numeric
+order, every file in `supabase/migrations/` from `0001_extensions_and_enums.sql` to
+`0025_quickbooks_sourced_commitments.sql`. Do not skip, do not reorder, do not batch. Later
+migrations alter objects earlier ones create (for example `0025` recreates `v_inventory` and
+drops `record_commitment` from `0009`), so the order is load-bearing.
 
 | # | File | What it creates |
 |---|---|---|
@@ -221,14 +228,16 @@ order. Do not skip, do not reorder, do not batch.
 | 2 | `supabase/migrations/0002_profiles_and_role_helpers.sql` | `profiles` + RLS + `app_role()`, `is_admin()`, `handle_new_user()` + trigger, `ensure_profile()` |
 | 3 | `supabase/migrations/0003_products.sql` | `products` + RLS + indexes |
 | 4 | `supabase/migrations/0004_inventory.sql` | `inventory` + generated `qty_available_source` + RLS + indexes |
-| 5 | `supabase/migrations/0005_commitments.sql` | `commitments` + RLS + lifecycle trigger |
+| 5 | `supabase/migrations/0005_commitments.sql` | `commitments` + RLS + lifecycle trigger (read-only history since `0025`) |
 | 6 | `supabase/migrations/0006_app_settings.sql` | `app_settings` singleton + RLS + the single row |
 | 7 | `supabase/migrations/0007_inventory_sync_runs.sql` | `inventory_sync_runs` + RLS |
-| 8 | `supabase/migrations/0008_inventory_view.sql` | `pending_commitment_totals()` + `v_inventory` |
-| 9 | `supabase/migrations/0009_fn_record_commitment.sql` | the concurrency-controlled write path |
-| 10 | `supabase/migrations/0010_fn_apply_inventory_sync.sql` | match-only retirement |
+| 8 | `supabase/migrations/0008_inventory_view.sql` | `pending_commitment_totals()` + `v_inventory` (both replaced by `0025`) |
+| 9 | `supabase/migrations/0009_fn_record_commitment.sql` | the portal commitment write path (dropped by `0025`) |
+| 10 | `supabase/migrations/0010_fn_apply_inventory_sync.sql` | the sync procedure (replaced by `0025`) |
 | 11 | `supabase/migrations/0011_rls_policies.sql` | all 15 policies across 6 tables |
 | 12 | `supabase/migrations/0012_grants.sql` | revokes, grants, function EXECUTE grants |
+| 13–24 | `supabase/migrations/0013_…` to `0024_…` | provisioned-only reads and column grants, enrollment, documents, admin onboarding, trigger search paths, simulated live feed, login lockout, push tokens and grants, auto-provision trigger dropped, product images and import, admin inventory insert |
+| 25 | `supabase/migrations/0025_quickbooks_sourced_commitments.sql` | committed from QuickBooks only: `v_inventory` recreated, `record_commitment` dropped, sync takes rows only, `commitments` read-only |
 
 > **`supabase/migrations/0010_fn_apply_inventory_sync.sql` was amended in place on 2026-08-19**
 > (role guard hardened to fail closed within its own file). Nothing in this repository has ever
@@ -247,8 +256,8 @@ because it changes nothing you have to do but it is worth knowing.
 
 | # | File |
 |---|---|
-| 13 | `supabase/seed/0001_seed_catalogue.sql` |
-| 14 | `supabase/seed/0002_seed_fixtures.sql` |
+| 26 | `supabase/seed/0001_seed_catalogue.sql` |
+| 27 | `supabase/seed/0002_seed_fixtures.sql` |
 
 **Do not apply `0003` yet.** It is step 7.
 
@@ -370,14 +379,14 @@ UPDATE public.profiles SET role = 'admin' WHERE email = 'their.address@example.c
 There is no self-service path to `admin` anywhere in the application, and no `role` value is
 ever accepted from a request.
 
-### Step 5 — the real rep signs in
+### Step 5 — the real admin signs in
 
-They go to `/login`, enter their address, and follow the emailed link. This creates their
-`profiles` row with role `rep`.
+The real admin signs in, which creates their `profiles` row, and is then promoted with the
+`UPDATE` in step 4.
 
-This must happen **before** step 7. `supabase/seed/0003_seed_demo_delta.sql` binds the demo
-delta to the earliest `rep` profile by `created_at`; if no rep profile exists it raises a
-`NOTICE` and does nothing.
+This must happen **before** step 7. `supabase/seed/0003_seed_demo_delta.sql` credits
+`SEA-9003`'s seeded override to the earliest `admin` profile by `created_at`; if no admin
+profile exists it raises a `NOTICE` and does nothing.
 
 The magic-link email template does not need changing. The callback handles both the default
 `{{ .ConfirmationURL }}` (PKCE `code`) and `{{ .TokenHash }}` shapes.
@@ -388,33 +397,31 @@ The magic-link email template does not need changing. The callback handles both 
 SELECT id, email, role, created_at FROM public.profiles ORDER BY created_at;
 ```
 
-You should see the real rep with role `rep`. If the table is empty, the profile trigger did
+You should see the real admin with role `admin`. If the table is empty, the profile trigger did
 not fire — sign in once more; the auth callback calls `ensure_profile()` on every successful
 sign-in.
 
-### Step 7 — apply the demo delta
+### Step 7 — apply seed `0003` (SEA-9003 attribution)
 
 | # | File |
 |---|---|
-| 15 | `supabase/seed/0003_seed_demo_delta.sql` |
+| 28 | `supabase/seed/0003_seed_demo_delta.sql` |
 
-**Order matters here and the failure is silent.** This file:
+The filename is historical: until `0025` this file also created a demo rep commitment. It now
+does one thing — credits `SEA-9003`'s seeded manual override to the **earliest `admin`
+profile by `created_at`**.
 
-- binds to the **earliest `rep` profile by `created_at`**, and
-- **does nothing at all if any commitment row already exists, anywhere.** Its guard is
-  `IF EXISTS (SELECT 1 FROM public.commitments)` — not scoped by sku or by location.
-
-So it must be applied after a real rep has signed in and **before** anything else writes a
-commitment, including the verification harness. Run it now and confirm:
+**Order matters here and the failure is silent.** If a verification test admin existed first,
+it would be credited instead, and `SEA-9003` would lose its attribution when the test
+identities are removed (`profiles ON DELETE SET NULL`). So apply it after the real admin has
+signed in and **before** step 9. Confirm:
 
 ```sql
-SELECT sku, location, qty, state, note FROM public.commitments;
+SELECT p.email FROM public.inventory i JOIN public.profiles p ON p.id = i.override_by
+ WHERE i.sku = 'SEA-9003' AND i.location = 'default';
 ```
 
-You should see one row: `SEA-9007 / default / 6 / pending / Demo delta: …`. That row is what
-makes the brief's worked example — 40 on hand, 10 committed in QuickBooks, 6 more committed by
-reps, 24 available — demoable. If it is missing, do not continue; `0003` will never produce it
-once other commitments exist.
+You should see the real admin's address. If there is no row, do not continue.
 
 ### Step 8 — check what the harness can see
 
@@ -424,7 +431,7 @@ npm run verify:preflight
 ```
 
 Read-only. Creates nothing. It tells you which migrations or seed files are missing, whether
-the demo delta is in place, and whether the test identities exist. It distinguishes
+`SEA-9003` is attributed to a real admin, and whether the test identities exist. It distinguishes
 `NOT EXECUTED — no Supabase configuration` from `NOT EXECUTED — schema not applied` from
 `NOT EXECUTED — seed not applied`, because those send you to three different places. Fix
 anything it reports before continuing.
@@ -441,18 +448,19 @@ sending any email and without setting any password**. Idempotent — safe to re-
 `example.invalid` is a reserved, non-routable TLD: those addresses cannot receive mail and
 cannot be mistaken for a person's.
 
-**It will refuse to run if the demo delta is not yet in place** (step 7). That refusal is
-correct: creating test identities first risks binding the demo delta to an artefact that gets
-deleted afterwards, and the first commitment the harness writes would suppress `0003`
-permanently. If you see the refusal, go back to step 7.
+**It will refuse to run unless `SEA-9003` is attributed to a real, non-test admin** (step 7).
+That refusal is correct: creating the test admin first would let it take that attribution, and
+removing it afterwards would leave the override unattributed. If you see the refusal, go back
+to steps 5 and 7.
 
-### Step 10 — run the four attacks
+### Step 10 — run the verification attacks
 
 ```bash
 npm run verify
 ```
 
-To include the three HTTP assertions (`2a.10`, `4.9`, `4.10`), start the app in a second
+To include the HTTP assertions (`4.9`, `4.10`, and the suite 5 assertions that need the app),
+start the app in a second
 terminal first and point the harness at it:
 
 ```bash
@@ -461,7 +469,7 @@ PORTAL_BASE_URL=http://127.0.0.1:3000 npm run verify   # terminal 2
 ```
 
 `PORTAL_BASE_URL` is a harness input only — the application never reads it, which is why it is
-not in `.env.example`. Without it, those three assertions print `NOT EXECUTED` and say so. The
+not in `.env.example`. Without it, those assertions print `NOT EXECUTED` and say so. The
 harness mints the session cookie itself; there is no cookie for you to paste anywhere, by
 design — a pasted cookie is a credential in your shell history.
 
@@ -477,11 +485,11 @@ configuration is missing or the endpoint is unreachable, every affected attack p
 `NOT EXECUTED — no Supabase configuration` and the command exits non-zero — it never silently
 falls back to a local database.
 
-**This writes to the live project.** It creates products prefixed `KYV-`, inventory and
-commitment rows at `location = 'kyv-verify'`, and `inventory_sync_runs` rows. While they
-exist they are **visible in the app's inventory list** under the category
-"KYV verification artefact". It does **not** modify any `SEA-*` seed row or the demo delta,
-and it writes `app_settings` only back to its own current value. Step 11 removes all of it.
+**This writes to the live project.** It creates products prefixed `KYV-`, inventory rows and
+two historical commitment rows (seeded by `service_role` for attack 1) at
+`location = 'kyv-verify'`, and `inventory_sync_runs` rows. While they exist they are **visible
+in the app's inventory list** under the category "KYV verification artefact". It does **not**
+modify any `SEA-*` seed row, and it writes `app_settings` only back to its own current value. Step 11 removes all of it.
 
 ### Step 11 — remove the verification artefacts
 
@@ -520,7 +528,7 @@ SELECT count(*) FROM public.products    WHERE sku LIKE 'KYV-%';        -- 0
 SELECT count(*) FROM public.commitments WHERE location LIKE 'kyv-%';   -- 0
 SELECT count(*) FROM public.profiles p JOIN auth.users u ON u.id = p.id
  WHERE u.email LIKE '%.verify@example.invalid';                        -- 0
-SELECT sku, qty, state FROM public.commitments;                        -- the demo delta, alone
+SELECT sku, qty, state FROM public.commitments;                        -- pre-0025 history only
 ```
 
 ---
@@ -532,8 +540,9 @@ npm run verify:local
 ```
 
 Stands up an ephemeral local PostgreSQL server, applies the committed migrations to it, and
-runs the same four attacks — including the deterministic lock-interleaving proof that the
-hosted path cannot reach, because PostgREST has no open transactions.
+runs attacks 1, 2 and 4 — including the checks the hosted path can only make statically
+(`1.12`, the deployed view's `security_invoker`; `4.13`, the role guard with `EXECUTE`
+deliberately granted to `anon`).
 
 **It exercises policy logic only.** It does not cover identity issuance, JWT signing, JWT
 verification, PostgREST, or session handling. A pass here is never a claim about the hosted
@@ -553,26 +562,16 @@ components/     the inventory list, row, badges, filters — plus their CSS modu
 lib/            supabase clients, auth, the adapter, status derivation, error mapping
 supabase/       migrations (written, applied by hand) and generated seed
 scripts/        deterministic seed and icon generators, secrets check, test identities
-verify/         the four attacks. verify/hosted/ targets the hosted project over HTTPS;
+verify/         the verification attacks. verify/hosted/ targets the hosted project over HTTPS;
                 verify/lib/harness.mjs is the demoted local-only path (loopback guarded)
 docs/           the implementation plan this was built from
 ```
 
-### The two API routes that are not features
+### The API route that is not a feature
 
-**`app/api/commitments` is a step-1 verification surface, not a shipped feature.** No button,
-form, screen, link or placeholder anywhere in this build reaches it (D8 holds the
-commitment-recording UI). It exists because the commitments data layer ships in full so
-verification requirements 2 and 3 can be attacked server-side, which is how the brief says
-those attacks are run. As of the 2026-08-19 security pass it is authenticated, scoped to a
-**provisioned identity**, and rate-limited at 30 requests/minute per user. **Step 2 will
-formalise it** — that is when scope, response shape and limits get a proper design pass. An
-unprotected write endpoint does not ship just because no button points at it.
-
-Its scope is deliberately *not* `admin`. `record_commitment` (migration 0009) requires only a
-non-NULL `auth.uid()` and migration 0012 grants `EXECUTE` to `authenticated`; requiring admin at
-the route would contradict the database — the gate that actually matters — and would break the
-rep-session attack surface the harness depends on.
+`app/api/commitments` — formerly a step-1 verification surface for the portal commitment
+ledger — was removed with `0025`, together with `/my-commitments`, `/reconciliation` and the
+commit form.
 
 **`GET /api/health/auth` is the server-side configuration health signal.** It exists because
 `app/login/auth-error.ts` classifies `otp_disabled` and `over_email_send_rate_limit` as
@@ -608,31 +607,24 @@ Assertion `5.6g` records what a hosted run actually observed.
 
 A few decisions worth knowing before changing anything:
 
-- **`commitments` has a SELECT policy and no INSERT/UPDATE/DELETE policy, for any role,
-  including admin.** This is deliberate. An INSERT policy would let a client write a row
-  directly and skip the availability check inside `record_commitment`, making the concurrency
-  control trivially bypassable. Every write goes through that function.
+- **`commitments` is read-only history since `0025`.** It has a SELECT policy (own rows for a
+  rep, all for an admin) and no INSERT/UPDATE/DELETE policy, and `INSERT`/`UPDATE`/`DELETE`
+  are revoked from `anon` and `authenticated`. No client, admin included, can write it.
+- **`qty_committed` is written only by `apply_inventory_sync`.** It is outside the
+  column-scoped `INSERT` and `UPDATE` grants on `inventory`, so no portal path can enter a
+  committed figure. A sync on a manual-override row keeps the corrected on-hand but still
+  refreshes committed from QuickBooks, and the correction stays credited to the admin who made
+  it (`pin_override_attribution`, amended in `0025`).
 - **`v_inventory` is created `WITH (security_invoker = on)`.** A Postgres view runs as its
   owner by default, which would make it a complete RLS bypass reachable with the anon key.
-- **The portal delta comes from `pending_commitment_totals()`, a `SECURITY DEFINER`
-  aggregate** — not from selecting `commitments` in the view. With `security_invoker` on, a
-  rep would otherwise compute the delta from only their *own* commitments and see an
-  availability figure that is too high, silently reintroducing the oversell bug. The function
-  returns totals per `(sku, location)` and nothing else: reps learn how many units are spoken
-  for, never by whom.
-- **`record_commitment` takes no `rep_id` parameter.** Identity comes from `auth.uid()` inside
-  the function. That is what stops a `SECURITY DEFINER` function from becoming an RLS bypass.
 - **`app_role()` / `is_admin()` are `SECURITY DEFINER`.** They are called from inside the
   policies on `profiles` itself; a `SECURITY INVOKER` function would recurse (`42P17`).
-- **`FORCE ROW LEVEL SECURITY` is deliberately not used.** The `SECURITY DEFINER` write path
+- **`FORCE ROW LEVEL SECURITY` is deliberately not used.** The `SECURITY DEFINER` sync path
   depends on the table-owner bypass.
-- **Retirement is by matching only. Nothing time-based.** There is no `now()`, `interval` or
-  `age()` anywhere in the retirement path, and the lifecycle trigger rejects
-  `pending → retired` outright, so no future cron job can retire a live delta in one step. A
-  commitment a sync does not mention persists in `pending` and keeps reducing `available`,
-  indefinitely. **That is the default, not a special case.**
-- **`available` is never clamped at zero.** A negative figure means the source dropped on-hand
-  below what is already spoken for — exactly the condition a rep needs to see.
+- **`apply_inventory_sync` refuses a non-empty `matches` array with `KY016`.** Commitment
+  matching was removed in `0025`; a stale caller fails loudly instead of being silently ignored.
+- **`available` is never clamped at zero.** A negative figure means QuickBooks has more on open
+  sales orders than on hand — exactly the condition a rep needs to see.
 - **The Supabase auth cookie is written `httpOnly: true`,** overriding `@supabase/ssr`'s
   documented default of `false`. It is set at the two writers that actually emit a `Set-Cookie`
   header — `lib/supabase/server.ts` and the response writer in `lib/supabase/middleware.ts` —
@@ -665,29 +657,23 @@ use Advanced Inventory, and whether Sales Orders are entered at all are all unkn
 rules are what make a wrong guess cheap instead of expensive. Nobody should be told
 integration is "just a config change" until those questions are answered.
 
-### Authority mode — a setting, not a fork
-
-`app_settings.inventory_authority` is `'quickbooks'` (shipping default) or `'portal'`.
+### One figure: available in QuickBooks
 
 ```
-quickbooks:  AVAILABLE (QUICKBOOKS)  30
-             40 on hand · 10 committed in QuickBooks
-             ⚑ 6 more committed by reps, not yet in QuickBooks → 24 available
-
-portal:      AVAILABLE  24
-             40 on hand · 16 committed (10 QuickBooks + 6 rep)
-             QuickBooks alone shows 30 available
+AVAILABLE (QUICKBOOKS)  30
+40 on hand · 10 committed in QuickBooks · 48 incoming
 ```
 
-**Neither mode hides a number and neither silently overrides.** Both figures are on screen in
-both modes; only the emphasis moves. Both modes read the same view, compute the same figures
-and render the same component — the mode is consulted in exactly one function
-(`availabilityPresentation` in `lib/status.ts`), which returns data, so there is no second
-rendering branch to keep in sync. Flipping it is a one-row `UPDATE` by an admin; no deploy.
+The incoming part appears only when there is stock on the way. The expanded row lists
+"Committed (QuickBooks sales orders)" and "Available" separately. Both inputs are always on
+screen, so a rep can see how the figure was reached. `availabilityPresentation` in
+`lib/status.ts` returns data, not markup, so there is one rendering path.
 
-**The status badge is computed from the conservative `qty_available` in both modes.** Authority
-governs emphasis, not safety. A badge reading "in stock" because QuickBooks had not caught up
-would reintroduce the bug the project exists to prevent.
+Until `0025`, `app_settings.inventory_authority` switched between a `quickbooks` and a `portal`
+presentation of a portal delta. With no portal delta there is one mode; the column is pinned to
+`'quickbooks'` and the app no longer reads it.
+
+**The status badge is computed from `qty_available`** — on hand minus committed in QuickBooks.
 
 ### Stock status is legible without reading the numbers
 
@@ -733,8 +719,8 @@ rather than depending on a random draw:
 | `SEA-9003` | an admin override that **contradicts** the source number, attributed and timestamped |
 | `SEA-9004` | a 124-character product name that threatens a mobile layout |
 | `SEA-9005` | a stale row, so the freshness threshold is demonstrable |
-| `SEA-9006` | availability of exactly 1 — the contended row in the concurrency attack |
-| `SEA-9007` | 40 on hand / 10 committed — the brief's worked example for the delta ledger |
+| `SEA-9006` | availability of exactly 1; attack 2 pushes its committed above on hand to prove a negative figure is shown |
+| `SEA-9007` | 40 on hand / 10 committed — the brief's worked example; attack 2 syncs a new committed figure onto it |
 
 Seed rows carry **relative** timestamps (`now() - interval '17 minutes'`), so the file is
 byte-stable yet the data is correctly aged whenever it is applied. A file generated today and

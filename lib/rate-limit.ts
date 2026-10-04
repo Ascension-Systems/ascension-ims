@@ -42,13 +42,14 @@ type Window = { count: number; windowStartMs: number; lastSeenMs: number }
  * `windows.clear()`. That coupled every limiter in the process to every other one, and the
  * buckets do not have comparable key cardinality:
  *
- *   commitments:post      keyed on a revalidated user.id  -> ~120 keys, bounded by the user list
+ *   (an authenticated   keyed on a revalidated user.id  -> ~120 keys, bounded by the user list;
+ *    per-user bucket)     the original one, commitments:post, was removed with 0025)
  *   health:auth           keyed on clientIpKey()          -> UNBOUNDED; the header is spoofable
  *   health:auth:global    a single constant key           -> exactly 1 key
  *
  * So an unauthenticated caller rotating `x-forwarded-for` against the public `/api/health/auth`
  * could mint unlimited `health:auth` keys, overflow the shared map, and reset the counters of
- * the other two buckets as collateral — flushing every signed-in user's `commitments:post`
+ * the other two buckets as collateral — flushing every signed-in user's per-user
  * budget AND the global probe ceiling that exists to bound outbound vendor traffic. A public,
  * unauthenticated endpoint must not be able to erase an authenticated endpoint's limiter, and
  * a limiter must not be able to erase its own backstop.

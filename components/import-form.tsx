@@ -79,8 +79,8 @@ export function ImportForm() {
         onChange={(e) => { setCsv(e.target.value); setResult(null) }}
         placeholder={
           'Choose a .csv above, or paste it here.\n\n' +
-          'SKU,Name,Category,On Hand,Committed,Incoming\n' +
-          'UMB-1001,11 ft Octagon Geneva Umbrella,Umbrellas,24,4,12'
+          'SKU,Name,Category,On Hand,Incoming\n' +
+          'UMB-1001,11 ft Octagon Geneva Umbrella,Umbrellas,24,12'
         }
         rows={6}
         disabled={busy}

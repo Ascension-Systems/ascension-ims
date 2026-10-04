@@ -1,21 +1,27 @@
-# Verification harness — the four required attacks
+# Verification harness — the required attacks
 
-Four things in this build are most likely to be confidently wrong, and **all four fail
-silently** — nothing in the UI reveals them. Rendering the page is not sufficient. Each is
-actively attacked here, not merely exercised.
+The things in this build most likely to be confidently wrong **fail silently** — nothing in
+the UI reveals them. Rendering the page is not sufficient. Each is actively attacked here, not
+merely exercised.
+
+**Since migration `0025` (3 Oct 2026) the attacks are 1, 2 and 4.** Reps no longer record
+commitments in the portal; "committed" is QuickBooks' quantity on open sales orders. Attack 2
+is now "QuickBooks is the only source of committed"; attack 3 ("delta survives a stale
+baseline") is retired, because the ledger it protected no longer exists. Attack 4 keeps its
+number. Full rationale in `docs/VERIFICATION.md` §4–§5.
 
 **Assertions run against a real database, never against mocks.** A mocked RLS policy proves
-nothing; that is the whole point of these four.
+nothing; that is the whole point of these attacks.
 
 ```
 npm run verify:preflight        # read-only. Creates nothing. Tells you what is missing
 npm run verify:identities       # creates the two test identities on the hosted project
-npm run verify                  # the four attacks, against the hosted project
+npm run verify                  # attacks 1, 2, 4 and suite 5, against the hosted project
 npm run verify:identities:remove  # removes every artefact the above created
 ```
 
-The ordered, zero-prior-context procedure — migrations, seed, users, the demo delta, and the
-order they must go in — is in **`README.md`, "Running this against the hosted Supabase
+The ordered, zero-prior-context procedure — migrations, seed, users, seed `0003` (SEA-9003
+attribution), and the order they must go in — is in **`README.md`, "Running this against the hosted Supabase
 project"**. It is not restated here. Read it before running anything.
 
 ---
@@ -42,9 +48,9 @@ Totals are computed from what actually ran. Nothing is seeded with an expected c
 | Channel | Used for |
 |---|---|
 | PostgREST `/rest/v1/…` | table reads, filtered writes, refusal SQLSTATEs |
-| PostgREST `/rest/v1/rpc/…` | `record_commitment`, `apply_inventory_sync` |
+| PostgREST `/rest/v1/rpc/…` | `apply_inventory_sync`; `record_commitment` only to assert it no longer exists (`2.4`) |
 | GoTrue `/auth/v1/…` | admin user creation, magic-link generation, OTP exchange, real signed JWTs |
-| the running app over HTTP | `POST /api/commitments`, `POST /api/sync` — only when `PORTAL_BASE_URL` is set |
+| the running app over HTTP | `POST /api/documents` (session probe), `POST /api/sync` — only when `PORTAL_BASE_URL` is set |
 
 **There is no `SUPABASE_DB_URL` and no `DATABASE_URL`, deliberately.** A Supabase direct or
 pooler connection string embeds the database password, and the credential rule forbids
@@ -88,7 +94,7 @@ harness.
 
 ### Preflight — "schema not applied" is its own answer
 
-Migrations 0001–0012 are applied by hand. A first hosted run finds no tables at all, and
+Migrations `0001`–`0025` are applied by hand. A first hosted run finds no tables at all, and
 conflating that with a missing environment variable sends the reader to the wrong dashboard
 page. The verdicts are distinct strings and are never substituted for one another:
 
@@ -96,13 +102,22 @@ page. The verdicts are distinct strings and are never substituted for one anothe
 NOT EXECUTED — no Supabase configuration
 NOT EXECUTED — schema not applied
 NOT EXECUTED — seed not applied
-NOT EXECUTED — demo delta not applied, run order violated
+NOT EXECUTED — SEA-9003 not attributed (seed 0003), run order violated
 NOT EXECUTED — test identities not provisioned (run npm run verify:identities)
 ```
 
 A missing table surfaces from PostgREST as HTTP 404 with `code: 'PGRST205'`; the preflight
 branches on that code, never on message text. It is read-only, creates nothing, and is also
 available on its own as `npm run verify:preflight`.
+
+**The attribution interlock.** `supabase/seed/0003_seed_demo_delta.sql` (filename historical)
+credits `SEA-9003`'s seeded override to the **earliest** admin profile. If the verification
+admin existed first it would take that credit, and `SEA-9003` would lose its attribution when
+the test identities are removed. So the preflight and `npm run verify:identities` both refuse
+unless `SEA-9003.override_by` names a real, non-test admin (`attributionVerdict` in
+`verify/hosted/lib/identity.mjs`). Order: provision and sign in the real admin → paste seed
+`0003` → then `npm run verify:identities`. Before `0025` this interlock probed for a demo rep
+commitment that `0003` created; it no longer creates one.
 
 ### Identities — real sessions, no email, no password
 
@@ -131,8 +146,9 @@ single cookie produces a 401 where a 403 was expected, which reads as a failed a
 rather than as a broken harness.
 
 Before any HTTP assertion runs, a **precondition probe** confirms the app accepts the minted
-session (`POST /api/commitments` with an impossible quantity → 409, so it writes nothing). If
-it does not, the HTTP assertions report `NOT EXECUTED — rep session cookie not accepted by the
+session: `POST /api/documents` with the rep's cookie and no body → **403** from
+`requireAdmin()`, the first statement of the handler, so it writes nothing. (It deliberately
+does not use `/api/sync`, which is `4.9`'s own subject.) If the session is not accepted, the HTTP assertions report `NOT EXECUTED — rep session cookie not accepted by the
 app` rather than FAIL.
 
 ---
@@ -144,11 +160,12 @@ direction.** Against embedded Postgres every destructive statement ran inside a 
 that rolled back. Over PostgREST there is no rollback: every request commits. Ported
 literally, the admin-control assertions would permanently set `SEA-9006.qty_on_hand` to 9999,
 permanently **delete** the `SEA-9006` inventory row, set `SEA-9007.qty_on_hand` to 4000, and
-flip `app_settings.inventory_authority` to `portal` for the whole live portal.
+flip `app_settings.inventory_authority` to `portal` (a column the app no longer reads since
+`0025`, but still live data).
 
 **The rule instead:** every hosted statement that writes targets either (a) a harness-owned
 disposable row in the KYV namespace, or (b) `app_settings`, written back to its own current
-value. **No `SEA-*` row is mutated and the demo delta is read-only.**
+value. **No `SEA-*` row is mutated.**
 
 This weakens nothing. RLS policies are table-scoped, not SKU-scoped: proving
 `inventory_update_admin` on `KYV-0001` is exactly as strong as proving it on `SEA-9007`, and
@@ -164,14 +181,16 @@ is the single teardown predicate. All live at `location = 'kyv-verify'`.
 |---|---|---|
 | `KYV-0001` | 100 on hand, 0 committed | 1.5, 1.5b, 1.6, 4.1, 4.12a |
 | `KYV-0002` | 5 on hand — created to be destroyed | 1.7, 1.7b, 4.3 |
-| `KYV-0003` | 200 / 186 → available 14 | attack 1 setup commitments |
-| `KYV-0004` | 1 on hand → **available exactly 1** | 2b 1-unit swarm, 2a.10 |
-| `KYV-0005` | 3 on hand → available 3 | 2b 3-unit swarm |
-| `KYV-0006` | 40 / 10 → available 30 | attack 3 |
-| `KYV-0007` | `manual_override` contradicting the source | 3.11 |
+| `KYV-0003` | 200 / 186 → available 14 | attack 1 historical commitment rows |
+| `KYV-0004` | 1 on hand; committed set to 3 → **available −2** | 2.2 (committed above on hand) |
+| `KYV-0005` | 3 on hand → available 3 | 2.1 |
+| `KYV-0006` | 40 / 10 → available 30 | 2.3, 2.7 |
+| `KYV-0007` | `manual_override` contradicting the source | 2.8, 2.8b |
+| `KYV-0008` | created by 2.9 as the admin-`INSERT` target | 2.9 |
 
-**Per full run** it creates and deletes roughly 7 products, 7 inventory rows, on the order of
-45 commitment rows and around a dozen `inventory_sync_runs` rows. **While they exist they are
+**Per full run** it creates and deletes roughly 8 products, 8 inventory rows, two historical
+commitment rows (seeded by `service_role` for attack 1 — no client can write `commitments`
+since `0025`) and a handful of `inventory_sync_runs` rows. **While they exist they are
 visible in the application's inventory list**, under the category "KYV verification artefact".
 `npm run verify` tears the fixtures down at the end; the test identities and the sync-run rows
 survive deliberately, so a re-run does not have to re-mint sessions.
@@ -189,7 +208,9 @@ survive deliberately, so a re-run does not have to re-mint sessions.
 This matters, because the obvious assertion is wrong.
 
 Postgres raises `42501` for an INSERT that violates a `WITH CHECK` policy, and for any command
-whose table GRANT the role lacks — which is why every write to `commitments` raises. It does
+whose table GRANT the role lacks — which is why every client write to `commitments` raises
+(since `0025` the privileges are revoked outright), and why an `INSERT` naming
+`inventory.qty_committed` raises (column-scoped grant). It does
 **not** raise for an UPDATE or DELETE that an RLS `USING` clause filters out: those rows are
 simply invisible to the statement, which reports 0 rows and no error.
 
@@ -205,7 +226,7 @@ is what stops a build that refuses everything for everyone from being reported a
 
 ---
 
-## The four attacks, and what runs where
+## The attacks, and what runs where
 
 ### `verify/hosted/01-rls-bypass.mjs` — attack 1
 
@@ -230,73 +251,38 @@ admin-session control run confirms the forbidden rows exist.
 grep of `supabase/migrations/0008_inventory_view.sql`. **No live proxy for it exists over this
 channel and none is invented.** The deployed-view check runs under `npm run verify:local`.
 
-### `verify/hosted/02-concurrent-last-unit.mjs` — attack 2
+### `verify/hosted/02-quickbooks-sole-source.mjs` — attack 2
 
-20 unawaited HTTPS requests to the `record_commitment` RPC, against `KYV-0004` (availability
-exactly 1) and then `KYV-0005` (3). They land on separate PostgREST backends and separate
-Postgres connections; each takes the `FOR UPDATE` row lock in turn; the outcome is decided by
-the database's serialisation, not by the client. `2b.0` records send and first-response
-timestamps for every request and computes the peak number in flight, so the overlap is
-evidenced rather than assumed.
+QuickBooks is the only source of committed. Figures are read through `v_inventory` with the rep
+session and compared with a service-role read of `inventory`; syncs run through the
+`apply_inventory_sync` RPC with the admin session; every forbidden action is issued directly at
+PostgREST and asserted by its error code.
 
-Assertions: exactly 1 succeeds, exactly 19 refused `KY001`, every refusal message matches
-`insufficient availability`, no other failure reason, exactly 1 pending row, `qty_available`
-0. Repeated at 3 units: exactly 3 succeed, 17 fail — this catches an off-by-one a 1-unit test
-would not.
+| # | What is done | Expected | Bucket |
+|---|---|---|---|
+| 2.1 | rep reads every KYV row through `v_inventory` | `qty_committed` equals `inventory.qty_committed` on every row | live |
+| 2.2 | same read, `KYV-0004` at on hand 1 / committed 3 | `qty_available = on_hand − committed` everywhere; `KYV-0004` reads −2, not clamped | live |
+| 2.3 | admin sync: `KYV-0006` committed 10 → 25 | rep sees committed 25, available 15 | live |
+| 2.4 | `record_commitment` RPC as rep and admin | gone: `PGRST202` (or `42883`) | live |
+| 2.5 | `INSERT` / `UPDATE` / `DELETE` on `commitments` as rep and admin | all six `42501` | live |
+| 2.6 | admin sync with a non-empty `matches` array | `KY016` | live |
+| 2.7 | rep calls `apply_inventory_sync` | `KY003`; row unchanged | live |
+| 2.8 | admin syncs `KYV-0007` (override pre-attributed to the rep) with committed 9 | on hand kept, committed 9, `override_by`/`override_at` unchanged | live |
+| 2.8b | admin `PATCH`es `override_by` to itself | accepted, attribution unchanged | live |
+| 2.9 | admin `INSERT INTO inventory` with and without `qty_committed` (`KYV-0008`) | with: `42501`; without: succeeds at committed 0 | live |
 
-**The residual gap, stated rather than glossed.** 2b proves the **outcome** is correctly
-serialised. It does **not** provide direct evidence of **blocking**. "B's call is still
-unsettled after 500 ms" is what distinguishes a correct lock from a lucky race, and it needs a
-transaction held open across statements, which PostgREST does not have at any N. The honest
-line, which the runner prints:
+Every assertion is live on both paths. `2.8` on hosted has one admin session, so "a user other
+than the author" is the rep, whose attribution is set by `service_role` (which has no
+`auth.uid()`, so the trigger leaves it as supplied); locally a second admin identity runs the
+sync. The property asserted is the same: a sync never re-credits a correction to whoever ran it.
 
-> serialisation outcome verified against hosted; blocking behaviour verified only under
-> verify:local
+### Attack 3 — retired
 
-`NOT EXECUTED` here: `2a.1`–`2a.9` (open transactions, `pg_locks`, `pg_stat_activity`,
-`pg_blocking_pids`) and `2b.10` (needs a lock held across statements — without one there is
-nothing to block behind, and a "fast second SKU" result would prove nothing while looking like
-a pass). All run under `npm run verify:local`.
-
-One environmental caveat, also printed: Supabase's PostgREST connection pool may be shallower
-than the swarm size, so some requests may queue. The pass condition is exactly 1 (or exactly
-3) winners regardless, but the observed peak is a lower bound on concurrency.
-
-### `verify/hosted/03-stale-baseline.mjs` — attack 3
-
-The oversell bug the project exists to prevent, on `KYV-0006` (40 on hand, 10 committed):
-
-- a rep commits 6 → available drops 30 → **24**;
-- a sync with the **same baseline** and **no matches** → still `pending`, still 24;
-- five more identical syncs → still 24;
-- a service-role `PATCH` of `created_at` is refused `KY006`, and so is `pending → retired`;
-- a sync **with a real match** confirms it and `qty_available` **stays 24** — no double count,
-  no upward blip, because the baseline write and the state change are one transaction;
-- a qty disagreement is reported `match_fields_disagree` and it stays `pending`;
-- an unknown id is reported `unknown_commitment` and nothing in the KYV namespace changes;
-- syncing a `manual_override` row preserves its quantities and records what the source claimed.
-
-**`commitments_still_pending` is project-wide, not payload-scoped.**
-`0010_fn_apply_inventory_sync.sql:148` computes it as
-`SELECT count(*) FROM public.commitments WHERE state = 'pending'`, unfiltered. On a hosted
-project the demo delta and any prior harness rows inflate it, so `3.2c` is asserted as a
-**delta** against a count read immediately beforehand. `commitments_confirmed`,
-`rows_applied` and `overrides_preserved` count only this call's work and stay absolute.
-
-`STATIC` here: `3.6a` and the six forbidden-pattern checks. `pg_get_functiondef` is not
-exposed, so they grep `supabase/migrations/0010_fn_apply_inventory_sync.sql` — same six
-patterns, same block isolation. The deployed-body check runs under `npm run verify:local`.
-
-`NOT EXECUTED` here: `3.4`, `3.4b`, `3.5`, `3.5b`, `3.5c`. Establishing a 30-day-old
-commitment requires `ALTER TABLE … DISABLE TRIGGER`; that is DDL, and DDL is unreachable over
-PostgREST for anyone. Re-running the 3.2 sync and reporting those ids as passes would be a
-false claim.
-
-**Conditional:** `3.4a` and `3.7` depend on `service_role` retaining Supabase's default
-`UPDATE` grant on `commitments` (`0012` revokes from `anon` and `authenticated` only). If the
-observation is `42501` rather than `KY006`, that is a **missing grant**, which is a different
-finding from a broken trigger — so it reports `NOT EXECUTED — service_role lacks the UPDATE
-grant on commitments; the trigger was never reached (observed 42501)`, not FAIL.
+"Delta survives a stale baseline" is retired with `0025`. It proved a pending portal commitment
+kept reducing availability until an explicit match retired it. The portal no longer records
+commitments and `apply_inventory_sync` no longer processes matches, so there is nothing left
+for it to attack. `verify/hosted/03-stale-baseline.mjs` and `verify/03-stale-baseline.mjs` are
+deleted; the number is not reused.
 
 ### `verify/hosted/04-role-enforcement.mjs` — attack 4
 
@@ -335,10 +321,14 @@ npm run verify:local
 ```
 
 Stands up an ephemeral local PostgreSQL server via `embedded-postgres`, applies the shim and
-the committed migrations, and runs the same four attacks. Its superuser password is generated
+the committed migrations, and runs attacks 1, 2 and 4. Its superuser password is generated
 at runtime with `crypto.randomBytes` and is never written to disk or to the repo.
 
-It survives because it is the only place attack 2a's deterministic lock interleaving can run.
+It survives because it is the only place that can inspect a deployed object directly (`1.12`)
+and grant `anon` `EXECUTE` on a disposable database to prove the role guard on its own
+(`4.13`). The shim also stubs the `storage` tables (`0015`, `0023`) and `cron.schedule` /
+`cron.unschedule` (`0018`); the embedded server has no `pg_cron`, so the harness drops `0018`'s
+`CREATE EXTENSION … pg_cron` on this path only and says so in the run header.
 Its banner and summary both carry, verbatim:
 
 ```
@@ -376,8 +366,8 @@ Stated plainly rather than papered over.
 - **Magic-link email delivery.** The harness bypasses email by design — that is what makes
   unattended verification possible — so it proves nothing about whether a link actually
   arrives. Only a Human signing in can confirm that.
-- **Raw-SQL, open-transaction and `pg_catalog` assertions against hosted.** Listed per
-  assertion above; all preserved under `verify:local`.
+- **`pg_catalog` assertions against hosted.** `1.12` is `STATIC` there; it runs live under
+  `verify:local`. Since `0025` no remaining assertion needs an open transaction.
 - **Deployed function and view bodies.** `pg_get_functiondef` and `pg_class` are not exposed.
   The `STATIC` checks assert the migration source; `verify:local` asserts a deployed object,
   but a locally deployed one.
@@ -389,7 +379,7 @@ moment the Human applies the migrations, which is what this harness is for.
 
 ---
 
-## Not one of the four
+## Not one of the attacks
 
 ```
 npm run check:secrets

@@ -19,13 +19,11 @@ type Role = 'rep' | 'admin'
  * shape, not colour alone, so it survives a colourblind viewer and a greyscale screenshot.
  *
  * Each role sees only the screens it uses. The set is filtered here for legibility only; the
- * database is the real gate — a rep who types /reconciliation is bounced by the page.
+ * database is the real gate — a rep who types /team is bounced by the page.
  */
 const PAGES: { href: string; label: string; roles: Role[] }[] = [
   { href: '/inventory', label: 'Inventory', roles: ['rep', 'admin'] },
   { href: '/resources', label: 'Resources', roles: ['rep', 'admin'] },
-  { href: '/my-commitments', label: 'My commitments', roles: ['rep'] },
-  { href: '/reconciliation', label: 'Reconciliation', roles: ['admin'] },
   { href: '/team', label: 'Team', roles: ['admin'] },
 ]
 

@@ -6,7 +6,7 @@ import { AnnounceForm } from '@/components/announce-form'
 import { ImportForm } from '@/components/import-form'
 import { ResetPassword } from '@/components/reset-password'
 import { RelativeTime } from '@/components/relative-time'
-import styles from '@/app/(app)/reconciliation/page.module.css'
+import styles from './page.module.css'
 
 /**
  * Admin: the rep roster and the enrollment code.

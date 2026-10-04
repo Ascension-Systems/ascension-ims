@@ -42,7 +42,7 @@ async function main() {
   {
     const root = await head('/')
     ok(root.status === 307 && /\/login$/.test(root.headers.get('location') || ''), 'GET / redirects to /login')
-    for (const p of ['/inventory', '/reconciliation', '/team', '/resources', '/my-commitments']) {
+    for (const p of ['/inventory', '/team', '/resources']) {
       const r = await head(p)
       const loc = r.headers.get('location') || ''
       ok(r.status === 307 && /\/login/.test(loc), `unauth ${p} redirects to /login`, `got ${r.status} -> ${loc}`)
@@ -52,7 +52,6 @@ async function main() {
   console.log('\nUnauthenticated API is refused (401, never a redirect that leaks a page):')
   {
     const cases = [
-      ['POST', '/api/commitments', { sku: 'SEA-9007', location: 'default', qty: 1 }],
       ['POST', '/api/documents', {}],
       ['POST', '/api/invites', { emails: 'x@example.invalid' }],
       ['PATCH', '/api/inventory', { sku: 'SEA-9007', qty_on_hand: 0 }],
