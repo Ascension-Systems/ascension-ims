@@ -169,6 +169,26 @@ export async function rawClient(db) {
 
 const readSql = (p) => readFileSync(p, 'utf8')
 
+/**
+ * LOCAL-ONLY REWRITES. The embedded server has no pg_cron, so `CREATE EXTENSION ... pg_cron`
+ * (migration 0018) cannot apply as written. The statement is removed on this path and the
+ * shim's cron.schedule/unschedule stubs take its place. Every rewrite is listed here and
+ * printed in the run header (LOCAL_REWRITE_NOTE) — never applied silently.
+ */
+const LOCAL_REWRITES = [
+  { pattern: /CREATE EXTENSION IF NOT EXISTS pg_cron\s*;/gi, replacement: '-- [verify:local] pg_cron removed; shim stubs cron.*' },
+]
+
+export const LOCAL_REWRITE_NOTE =
+  'Local rewrite  : `CREATE EXTENSION IF NOT EXISTS pg_cron` removed (no pg_cron in the embedded\n' +
+  '                server); cron.schedule/unschedule and storage.* are shim stubs.'
+
+function readMigration(p) {
+  let sql = readSql(p)
+  for (const { pattern, replacement } of LOCAL_REWRITES) sql = sql.replace(pattern, replacement)
+  return sql
+}
+
 export function migrationFiles() {
   return readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith('.sql'))
@@ -207,6 +227,8 @@ export async function bootstrap(db, client) {
 
   await client.query('DROP SCHEMA IF EXISTS public CASCADE')
   await client.query('DROP SCHEMA IF EXISTS auth CASCADE')
+  await client.query('DROP SCHEMA IF EXISTS storage CASCADE')
+  await client.query('DROP SCHEMA IF EXISTS cron CASCADE')
   await client.query('CREATE SCHEMA public')
 
   // The shim supplies the minimum auth surface the migrations reference. It is applied on
@@ -215,7 +237,7 @@ export async function bootstrap(db, client) {
 
   for (const f of migrationFiles()) {
     try {
-      await client.query(readSql(join(MIGRATIONS_DIR, f)))
+      await client.query(readMigration(join(MIGRATIONS_DIR, f)))
     } catch (err) {
       throw new Error(`migration ${f} failed to apply: ${err.message}`)
     }

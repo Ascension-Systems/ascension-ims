@@ -20,7 +20,7 @@
  * in both directions.
  */
 
-import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, migrationFiles } from './lib/harness.mjs'
+import { resolveDatabase, shutdownDatabase, PATH_CAVEAT, migrationFiles, LOCAL_REWRITE_NOTE } from './lib/harness.mjs'
 import { STATUS } from './lib/report.mjs'
 import { MANIFEST } from './lib/manifest.mjs'
 import {
@@ -63,6 +63,7 @@ async function main() {
       `Database path : ${db.label}`,
       `Migrations    : ${migrationFiles().length} files, applied from supabase/migrations/ in numeric order`,
       `Seed          : supabase/seed/0001 + 0002 (0003 excluded — it depends on a profile existing)`,
+      LOCAL_REWRITE_NOTE,
       'Target        : a LOCAL Postgres. Nothing here touches the hosted Supabase project.',
       'Hosted path   : `npm run verify`. This command is not a substitute for it and never',
       '                falls back to it, nor it to this.',
@@ -169,8 +170,18 @@ async function main() {
   process.exitCode = failed.length === 0 && drift.ok && integrity.ok && sums.ok ? 0 : 1
 }
 
-main().catch(async (err) => {
-  await shutdownDatabase()
-  process.stdout.write(`\nHARNESS ERROR: ${err.stack ?? err.message}\n`)
-  process.exitCode = 1
-})
+// EXIT EXPLICITLY. embedded-postgres registers async-exit-hook, which calls process.exit(0)
+// on beforeExit and discards process.exitCode — so a HARNESS ERROR or a failed attack used to
+// exit 0, and CI would have read a broken suite as a pass. Passing the code to process.exit
+// ourselves is what makes the non-zero exit real.
+// The empty write's callback fires once everything queued before it has flushed, so piped
+// output (CI logs) is not truncated by the exit.
+const exitAfterFlush = (code) => process.stdout.write('', () => process.exit(code))
+
+main()
+  .then(() => exitAfterFlush(process.exitCode ?? 0))
+  .catch(async (err) => {
+    await shutdownDatabase()
+    process.stdout.write(`\nHARNESS ERROR: ${err.stack ?? err.message}\n`)
+    exitAfterFlush(1)
+  })
